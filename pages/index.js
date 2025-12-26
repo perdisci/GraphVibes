@@ -1358,6 +1358,7 @@ export default function Home() {
                                 <option value="radialout">Radial (Outwards)</option>
                                 <option value="radialin">Radial (Inwards)</option>
                                 <option value="circular">Circular</option>
+                                <option value="community">Community</option>
                             </select>
                         </div>
                     </div>

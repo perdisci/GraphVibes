@@ -126,6 +126,40 @@ const GraphViz = ({
                         node.vx = 0;
                         node.vy = 0;
                     });
+                } else if (dagMode === 'community') {
+                    // Group by label
+                    const nodesByLabel = {};
+                    data.nodes.forEach(n => {
+                        const lbl = n.label || 'default';
+                        if (!nodesByLabel[lbl]) nodesByLabel[lbl] = [];
+                        nodesByLabel[lbl].push(n);
+                    });
+
+                    const labels = Object.keys(nodesByLabel);
+                    const clusterCount = labels.length;
+                    const centerRadius = clusterCount * 80 + 100; // Radius of the ring of clusters
+                    const centerAngleStep = (2 * Math.PI) / clusterCount;
+
+                    labels.forEach((label, idx) => {
+                        const clusterNodes = nodesByLabel[label];
+                        const clusterAngle = idx * centerAngleStep;
+                        const clusterCenterX = centerRadius * Math.cos(clusterAngle);
+                        const clusterCenterY = centerRadius * Math.sin(clusterAngle);
+
+                        const nodeCount = clusterNodes.length;
+                        const nodeRadius = Math.sqrt(nodeCount) * 20; // Radius of the cluster itself
+                        const nodeAngleStep = (2 * Math.PI) / nodeCount;
+
+                        clusterNodes.forEach((node, nIdx) => {
+                            const nAngle = nIdx * nodeAngleStep;
+                            node.fx = clusterCenterX + nodeRadius * Math.cos(nAngle);
+                            node.fy = clusterCenterY + nodeRadius * Math.sin(nAngle);
+                            node.x = node.fx;
+                            node.y = node.fy;
+                            node.vx = 0;
+                            node.vy = 0;
+                        });
+                    });
                 } else {
                     // Release nodes for force/DAG layout
                     data.nodes.forEach(node => {
@@ -140,8 +174,8 @@ const GraphViz = ({
             // Reheat simulation
             fgRef.current.d3ReheatSimulation();
 
-            // If switching to circular, might want to zoom to fit after a delay
-            if (dagMode === 'circular') {
+            // If switching to formatted layout, might want to zoom to fit after a delay
+            if (dagMode === 'circular' || dagMode === 'community') {
                 setTimeout(() => {
                     fgRef.current?.zoomToFit(400);
                 }, 100);
