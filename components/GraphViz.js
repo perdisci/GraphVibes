@@ -1,8 +1,8 @@
-import React, { forwardRef, useRef, useImperativeHandle, useState } from 'react';
+import React, { useRef, useImperativeHandle, useState } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import { ZoomIn, ZoomOut, Focus, Maximize2, Minimize2, Settings, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
 
-const GraphViz = forwardRef(({
+const GraphViz = ({
     data,
     onNodeClick,
     onLinkClick,
@@ -337,7 +337,7 @@ const GraphViz = forwardRef(({
             </div>
         </div>
     );
-});
+};
 
 GraphViz.displayName = 'GraphViz';
 
