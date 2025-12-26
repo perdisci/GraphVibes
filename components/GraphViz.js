@@ -14,7 +14,8 @@ const GraphViz = forwardRef(({
     onSettings,
     dagMode,
     nodePalette,
-    edgePalette
+    edgePalette,
+    labelStyle = 'glass'
 }, ref) => {
     const fgRef = useRef();
     const containerRef = useRef();
@@ -160,7 +161,89 @@ const GraphViz = forwardRef(({
                 backgroundColor={backgroundColor || "#0f111a"}
                 linkColor={getLinkColor}
                 nodeRelSize={6}
-                nodeRelSize={6}
+                nodeCanvasObject={(node, ctx, globalScale) => {
+                    const label = node.label;
+                    const fontSize = 12 / globalScale;
+                    const color = getNodeColor(node);
+
+                    // Draw node circle
+                    const radius = 6;
+
+                    ctx.beginPath();
+                    ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
+                    ctx.fillStyle = color;
+                    ctx.fill();
+
+                    // Determine text to show
+                    let text = node.id;
+                    if (node.properties && node.properties.name) {
+                        const nameProp = node.properties.name;
+                        if (Array.isArray(nameProp) && nameProp.length > 0 && nameProp[0].value) {
+                            text = nameProp[0].value;
+                        } else if (typeof nameProp === 'string') {
+                            text = nameProp;
+                        } else if (nameProp.value) {
+                            text = nameProp.value;
+                        }
+                    }
+                    if (typeof text === 'object') text = JSON.stringify(text);
+
+                    // Text setup
+                    ctx.font = `${fontSize}px Sans-Serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+
+                    // Draw Label based on style
+                    if (labelStyle === 'paper' || labelStyle === 'glass') {
+                        // Boxed styles
+                        const textWidth = ctx.measureText(text).width;
+                        const bckgDimensions = [textWidth, fontSize].map(n => n + fontSize * 0.4); // Padding
+
+                        ctx.fillStyle = labelStyle === 'paper' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.6)';
+
+                        // Round rect
+                        const x = node.x - bckgDimensions[0] / 2;
+                        const y = node.y - bckgDimensions[1] / 2;
+                        const w = bckgDimensions[0];
+                        const h = bckgDimensions[1];
+                        const r = 2;
+
+                        ctx.beginPath();
+                        ctx.moveTo(x + r, y);
+                        ctx.arcTo(x + w, y, x + w, y + h, r);
+                        ctx.arcTo(x + w, y + h, x, y + h, r);
+                        ctx.arcTo(x, y + h, x, y, r);
+                        ctx.arcTo(x, y, x + w, y, r);
+                        ctx.closePath();
+                        ctx.fill();
+
+                        ctx.fillStyle = labelStyle === 'paper' ? '#000' : '#fff';
+                        ctx.fillText(text, node.x, node.y);
+                    } else if (labelStyle === 'inverted') {
+                        // Inverted: Black text, White stroke
+                        ctx.lineWidth = 3 / globalScale;
+                        ctx.strokeStyle = '#ffffff';
+                        ctx.strokeText(text, node.x, node.y);
+
+                        ctx.fillStyle = '#000000';
+                        ctx.fillText(text, node.x, node.y);
+                    } else {
+                        // Standard: White text, Black stroke
+                        ctx.lineWidth = 3 / globalScale;
+                        ctx.strokeStyle = '#000000a0';
+                        ctx.strokeText(text, node.x, node.y);
+
+                        ctx.fillStyle = '#ffffff';
+                        ctx.fillText(text, node.x, node.y);
+                    }
+                }}
+                nodePointerAreaPaint={(node, color, ctx) => {
+                    // Define hit area for interaction
+                    ctx.fillStyle = color;
+                    ctx.beginPath();
+                    ctx.arc(node.x, node.y, 6, 0, 2 * Math.PI, false);
+                    ctx.fill();
+                }}
                 onNodeClick={(node, event) => {
                     if (onNodeClick) {
                         const color = getNodeColor(node);

@@ -56,7 +56,8 @@ export default function Home() {
         linkColor: '',  // default auto
         layoutMode: null, // null (force), td, bu, lr, rl, radialout, radialin
         activeNodePalette: 'default',
-        activeEdgePalette: 'default'
+        activeEdgePalette: 'default',
+        labelStyle: 'glass' // standard, inverted, paper, glass
     });
 
     const graphRef = useRef();
@@ -110,10 +111,17 @@ export default function Home() {
 
     const toggleMaximize = () => {
         setIsMaximized(!isMaximized);
-        setTimeout(() => {
-            if (graphRef.current) graphRef.current.zoomToFit(200);
-        }, 100);
     };
+
+    useEffect(() => {
+        // Trigger zoom to fit when maximized state changes, allowing time for layout update
+        if (graphRef.current?.zoomToFit) {
+            // Small delay to ensure container has resized
+            setTimeout(() => {
+                graphRef.current?.zoomToFit?.(400, 50);
+            }, 50);
+        }
+    }, [isMaximized]);
 
 
     // Check connection on load and settings change
@@ -352,6 +360,7 @@ export default function Home() {
                             dagMode={graphSettings.layoutMode}
                             nodePalette={GRAPH_PALETTES[graphSettings.activeNodePalette]?.colors}
                             edgePalette={GRAPH_PALETTES[graphSettings.activeEdgePalette]?.colors}
+                            labelStyle={graphSettings.labelStyle}
                             onMaximize={toggleMaximize}
                             isMaximized={isMaximized}
                             onSettings={() => setIsSettingsOpen(true)}
@@ -478,6 +487,23 @@ export default function Home() {
                             </div>
                         </div>
 
+
+
+                        <div className="form-group">
+                            <label className="form-label">Label Style</label>
+                            <select
+                                className="form-input"
+                                value={graphSettings.labelStyle || 'standard'}
+                                onChange={e => setGraphSettings({ ...graphSettings, labelStyle: e.target.value })}
+                                style={{ cursor: 'pointer' }}
+                            >
+                                <option value="standard">Standard (Outline)</option>
+                                <option value="inverted">Inverted (Dark Text)</option>
+                                <option value="paper">Paper (White Box)</option>
+                                <option value="glass">Glass (Dark Box)</option>
+                            </select>
+                        </div>
+
                         <div className="form-group">
                             <label className="form-label">Graph Layout</label>
                             <select
@@ -496,96 +522,101 @@ export default function Home() {
                             </select>
                         </div>
                     </div>
-                </div>
-            )}
+                </div >
+            )
+            }
 
-            {isConnectionModalOpen && (
-                <div className="modal-overlay" onClick={() => setIsConnectionModalOpen(false)}>
-                    <div className="modal" onClick={e => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <h3 className="modal-title">Connection Settings</h3>
-                            <button className="control-btn" onClick={() => setIsConnectionModalOpen(false)}>
-                                <X size={20} />
-                            </button>
-                        </div>
+            {
+                isConnectionModalOpen && (
+                    <div className="modal-overlay" onClick={() => setIsConnectionModalOpen(false)}>
+                        <div className="modal" onClick={e => e.stopPropagation()}>
+                            <div className="modal-header">
+                                <h3 className="modal-title">Connection Settings</h3>
+                                <button className="control-btn" onClick={() => setIsConnectionModalOpen(false)}>
+                                    <X size={20} />
+                                </button>
+                            </div>
 
-                        <div className="form-group">
-                            <label className="form-label">Gremlin Server Host</label>
-                            <input
-                                type="text"
-                                className="form-input"
-                                value={connectionSettings.host}
-                                onChange={e => setConnectionSettings({ ...connectionSettings, host: e.target.value })}
-                                placeholder="localhost"
-                            />
-                        </div>
+                            <div className="form-group">
+                                <label className="form-label">Gremlin Server Host</label>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    value={connectionSettings.host}
+                                    onChange={e => setConnectionSettings({ ...connectionSettings, host: e.target.value })}
+                                    placeholder="localhost"
+                                />
+                            </div>
 
-                        <div className="form-group">
-                            <label className="form-label">Port</label>
-                            <input
-                                type="text"
-                                className="form-input"
-                                value={connectionSettings.port}
-                                onChange={e => setConnectionSettings({ ...connectionSettings, port: e.target.value })}
-                                placeholder="8182"
-                            />
-                        </div>
+                            <div className="form-group">
+                                <label className="form-label">Port</label>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    value={connectionSettings.port}
+                                    onChange={e => setConnectionSettings({ ...connectionSettings, port: e.target.value })}
+                                    placeholder="8182"
+                                />
+                            </div>
 
-                        <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
-                            <button
-                                onClick={handleConnect}
-                                style={{
-                                    background: '#7c3aed',
-                                    color: 'white',
-                                    border: 'none',
-                                    padding: '0.5rem 1rem',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer',
-                                    fontWeight: '500'
-                                }}
-                            >
-                                Save & Connect
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {isThemeModalOpen && (
-                <div className="modal-overlay" onClick={() => setIsThemeModalOpen(false)}>
-                    <div className="modal" onClick={e => e.stopPropagation()} style={{ width: '300px' }}>
-                        <div className="modal-header">
-                            <h3 className="modal-title">Select Theme</h3>
-                            <button className="control-btn" onClick={() => setIsThemeModalOpen(false)}>
-                                <X size={20} />
-                            </button>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            {Object.entries(THEME_CONFIG).map(([key, config]) => (
+                            <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
                                 <button
-                                    key={key}
-                                    onClick={() => { setTheme(key); setIsThemeModalOpen(false); }}
+                                    onClick={handleConnect}
                                     style={{
-                                        padding: '1rem',
-                                        background: theme === key ? 'var(--primary)' : 'var(--surface-hover)',
-                                        border: '1px solid var(--border)',
-                                        borderRadius: '6px',
-                                        color: theme === key ? 'white' : 'var(--text-main)',
+                                        background: '#7c3aed',
+                                        color: 'white',
+                                        border: 'none',
+                                        padding: '0.5rem 1rem',
+                                        borderRadius: '4px',
                                         cursor: 'pointer',
-                                        textAlign: 'left',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '0.5rem'
+                                        fontWeight: '500'
                                     }}
                                 >
-                                    <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: config.background, border: '1px solid #666' }}></div>
-                                    {config.label}
+                                    Save & Connect
                                 </button>
-                            ))}
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+
+            {
+                isThemeModalOpen && (
+                    <div className="modal-overlay" onClick={() => setIsThemeModalOpen(false)}>
+                        <div className="modal" onClick={e => e.stopPropagation()} style={{ width: '300px' }}>
+                            <div className="modal-header">
+                                <h3 className="modal-title">Select Theme</h3>
+                                <button className="control-btn" onClick={() => setIsThemeModalOpen(false)}>
+                                    <X size={20} />
+                                </button>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                {Object.entries(THEME_CONFIG).map(([key, config]) => (
+                                    <button
+                                        key={key}
+                                        onClick={() => { setTheme(key); setIsThemeModalOpen(false); }}
+                                        style={{
+                                            padding: '1rem',
+                                            background: theme === key ? 'var(--primary)' : 'var(--surface-hover)',
+                                            border: '1px solid var(--border)',
+                                            borderRadius: '6px',
+                                            color: theme === key ? 'white' : 'var(--text-main)',
+                                            cursor: 'pointer',
+                                            textAlign: 'left',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '0.5rem'
+                                        }}
+                                    >
+                                        <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: config.background, border: '1px solid #666' }}></div>
+                                        {config.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+        </div >
     );
 }
