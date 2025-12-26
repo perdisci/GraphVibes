@@ -1,20 +1,27 @@
-import dynamic from 'next/dynamic';
+import React, { forwardRef, useRef, useImperativeHandle } from 'react';
+import ForceGraph2D from 'react-force-graph-2d';
 
-const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), {
-    ssr: false
-});
+const GraphViz = forwardRef(({ data, onNodeClick, onLinkClick, backgroundColor, linkColor, nodeColor }, ref) => {
+    const fgRef = useRef();
 
-const GraphViz = ({ data, onNodeClick, onLinkClick }) => {
+    useImperativeHandle(ref, () => ({
+        zoom: (...args) => fgRef.current?.zoom(...args),
+        zoomToFit: (...args) => fgRef.current?.zoomToFit(...args),
+        centerAt: (...args) => fgRef.current?.centerAt(...args),
+    }));
+
     return (
         <div style={{ height: '100%', width: '100%' }}>
             {data && <ForceGraph2D
+                ref={fgRef}
                 graphData={data}
                 nodeLabel="label"
                 nodeAutoColorBy="label"
+                nodeColor={nodeColor}
                 linkDirectionalArrowLength={3.5}
                 linkDirectionalArrowRelPos={1}
-                backgroundColor="#0f111a"
-                linkColor={() => '#2f3446'}
+                backgroundColor={backgroundColor || "#0f111a"}
+                linkColor={linkColor ? (() => linkColor) : (() => '#2f3446')}
                 nodeRelSize={6}
                 onNodeClick={onNodeClick}
                 onLinkClick={onLinkClick}
@@ -23,6 +30,8 @@ const GraphViz = ({ data, onNodeClick, onLinkClick }) => {
             />}
         </div>
     );
-};
+});
+
+GraphViz.displayName = 'GraphViz';
 
 export default GraphViz;

@@ -11,11 +11,13 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const { query } = req.body;
+    const { query, host = 'localhost', port = '8182' } = req.body;
 
     if (!query) {
         return res.status(400).json({ error: 'Query is required' });
     }
+
+    const wsUrl = `ws://${host}:${port}/gremlin`;
 
     try {
         // In a real generic query runner, we'd use the script executor.
@@ -25,7 +27,7 @@ export default async function handler(req, res) {
         // We'll create a new client just for script submission to allow raw string queries.
         // This is different from the 'g' traversal source.
         const gremlin = require('gremlin');
-        const client = new gremlin.driver.Client('ws://localhost:8182/gremlin', {
+        const client = new gremlin.driver.Client(wsUrl, {
             traversalSource: 'g',
             mimeType: 'application/vnd.gremlin-v3.0+json'
         });
@@ -117,7 +119,7 @@ export default async function handler(req, res) {
                     // g.V(ids...).bothE().where(__.otherV().hasId(ids...))
                     const edgeQuery = `g.V(${idList}).bothE().where(__.otherV().hasId(${idList})).dedup()`;
 
-                    const client2 = new gremlin.driver.Client('ws://localhost:8182/gremlin', {
+                    const client2 = new gremlin.driver.Client(wsUrl, {
                         traversalSource: 'g',
                         mimeType: 'application/vnd.gremlin-v3.0+json'
                     });
