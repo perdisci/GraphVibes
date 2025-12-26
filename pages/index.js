@@ -326,14 +326,13 @@ export default function Home() {
             // Single click - set timeout
             lastClickRef.current = now;
             clickTimeoutRef.current = setTimeout(() => {
-                setSelectedElement(node);
-                setIsDetailOpen(true);
+                setSelectedElement({ ...node, type: 'node' });
             }, DOUBLE_CLICK_DELAY);
         }
     }, [expandNode]);
 
     const handleLinkClick = useCallback((link) => {
-        setSelectedElement(link);
+        setSelectedElement({ ...link, type: 'edge' });
     }, []);
 
     const handleEditorDidMount = (editor, monaco) => {
