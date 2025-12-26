@@ -35,7 +35,8 @@ export default function Home() {
     const [graphSettings, setGraphSettings] = useState({
         backgroundColor: '#0f111a',
         nodeColor: '', // default auto
-        linkColor: ''  // default auto
+        linkColor: '',  // default auto
+        layoutMode: null // null (force), td, bu, lr, rl, radialout, radialin
     });
 
     const graphRef = useRef();
@@ -320,6 +321,7 @@ export default function Home() {
                             backgroundColor={graphSettings.backgroundColor}
                             nodeColor={graphSettings.nodeColor || undefined}
                             linkColor={graphSettings.linkColor || undefined}
+                            dagMode={graphSettings.layoutMode}
                             onMaximize={toggleMaximize}
                             isMaximized={isMaximized}
                             onSettings={() => setIsSettingsOpen(true)}
@@ -438,6 +440,24 @@ export default function Home() {
                                 onChange={e => setGraphSettings({ ...graphSettings, linkColor: e.target.value })}
                                 placeholder="Auto (leave empty)"
                             />
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">Graph Layout</label>
+                            <select
+                                className="form-input"
+                                value={graphSettings.layoutMode || ''}
+                                onChange={e => setGraphSettings({ ...graphSettings, layoutMode: e.target.value || null })}
+                                style={{ cursor: 'pointer' }}
+                            >
+                                <option value="">Force Directed (Standard)</option>
+                                <option value="td">Tree (Top-Down)</option>
+                                <option value="bu">Tree (Bottom-Up)</option>
+                                <option value="lr">Tree (Left-Right)</option>
+                                <option value="rl">Tree (Right-Left)</option>
+                                <option value="radialout">Radial (Outwards)</option>
+                                <option value="radialin">Radial (Inwards)</option>
+                            </select>
                         </div>
                     </div>
                 </div>
