@@ -311,17 +311,6 @@ export default function Home() {
                 />
 
                 <div className={`graph-area ${isMaximized ? 'full-screen-graph' : ''}`} style={{ position: 'relative' }}>
-                    <div className="graph-controls">
-                        <button className="control-btn" onClick={handleZoomIn} title="Zoom In"><ZoomIn size={18} /></button>
-                        <button className="control-btn" onClick={handleZoomOut} title="Zoom Out"><ZoomOut size={18} /></button>
-                        <button className="control-btn" onClick={handleZoomFit} title="Fit to Screen"><Focus size={18} /></button>
-                        <div style={{ height: '1px', background: 'var(--border)', margin: '4px 0' }} />
-                        <button className="control-btn" onClick={toggleMaximize} title={isMaximized ? "Minimize" : "Maximize"}>
-                            {isMaximized ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-                        </button>
-                        <button className="control-btn" onClick={() => setIsSettingsOpen(true)} title="Graph Settings"><Settings size={18} /></button>
-                    </div>
-
                     <div style={{ height: '100%', width: '100%' }}>
                         <GraphViz
                             ref={graphRef}
@@ -331,6 +320,9 @@ export default function Home() {
                             backgroundColor={graphSettings.backgroundColor}
                             nodeColor={graphSettings.nodeColor || undefined}
                             linkColor={graphSettings.linkColor || undefined}
+                            onMaximize={toggleMaximize}
+                            isMaximized={isMaximized}
+                            onSettings={() => setIsSettingsOpen(true)}
                         />
                     </div>
 
