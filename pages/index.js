@@ -57,7 +57,8 @@ export default function Home() {
         layoutMode: null, // null (force), td, bu, lr, rl, radialout, radialin
         activeNodePalette: 'default',
         activeEdgePalette: 'default',
-        labelStyle: 'glass' // standard, inverted, paper, glass
+        labelStyle: 'glass', // standard, inverted, paper, glass
+        expansionLimit: 50
     });
 
     const graphRef = useRef();
@@ -186,8 +187,90 @@ export default function Home() {
         }
     };
 
+    // Double-click detection
+    const clickTimeoutRef = useRef(null);
+
     const handleNodeClick = (node) => {
-        setSelectedElement({ ...node, type: 'node' });
+        if (clickTimeoutRef.current) {
+            // Double Click detected
+            clearTimeout(clickTimeoutRef.current);
+            clickTimeoutRef.current = null;
+            expandNode(node);
+        } else {
+            // Potential Single Click - wait 300ms
+            clickTimeoutRef.current = setTimeout(() => {
+                setSelectedElement({ ...node, type: 'node' }); // Explicitly set type 'node'
+                clickTimeoutRef.current = null;
+            }, 300);
+        }
+        // Always log for debugging if needed
+        console.log('Clicked node:', node.id);
+    };
+
+    const fetchAndMerge = async (query) => {
+        setLoading(true);
+        setError(null);
+        try {
+            const res = await fetch('/api/query', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    query,
+                    host: connectionSettings.host,
+                    port: connectionSettings.port
+                })
+            });
+
+            if (!res.ok) {
+                const errData = await res.json();
+                throw new Error(errData.error || 'Query failed');
+            }
+
+            const result = await res.json();
+
+            // Merge Data
+            setData(prevData => {
+                const nodeMap = new Map(prevData.nodes.map(n => [n.id, n]));
+                const linkMap = new Map(prevData.links.map(l => [l.id, l]));
+
+                // Add new nodes
+                result.graph.nodes.forEach(n => {
+                    if (!nodeMap.has(n.id)) {
+                        nodeMap.set(n.id, n);
+                    }
+                });
+
+                // Add new links
+                result.graph.links.forEach(l => {
+                    if (!linkMap.has(l.id)) {
+                        linkMap.set(l.id, l);
+                    }
+                });
+
+                return {
+                    nodes: Array.from(nodeMap.values()),
+                    links: Array.from(linkMap.values())
+                };
+            });
+
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const expandNode = (node) => {
+        // Query to get neighbors and edges
+        // We use store/cap/unfold to get a mixed stream of edges and vertices
+        // Quote ID if string to be safe
+        const safeId = typeof node.id === 'string' ? `'${node.id}'` : node.id;
+        const limit = graphSettings.expansionLimit || 50;
+
+        // g.V(id).bothE().limit(limit).store('r').otherV().store('r').cap('r').unfold()
+        const query = `g.V(${safeId}).bothE().limit(${limit}).store('res').otherV().store('res').cap('res').unfold()`;
+
+        fetchAndMerge(query);
     };
 
     const handleLinkClick = (link) => {
@@ -395,7 +478,9 @@ export default function Home() {
                     {selectedElement && (
                         <div className="detail-popup">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                                <h2 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-main)', textTransform: 'capitalize' }}>{selectedElement.type} Details</h2>
+                                <h2 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-main)', textTransform: 'capitalize' }}>
+                                    {selectedElement.type === 'node' ? 'Node Details' : (selectedElement.type === 'edge' ? 'Edge Details' : `${selectedElement.type} Details`)}
+                                </h2>
                                 <button
                                     onClick={() => setSelectedElement(null)}
                                     style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: '1.2rem' }}
@@ -485,6 +570,18 @@ export default function Home() {
                         </div>
 
                         <div className="form-group">
+                            <label className="form-label">Neighbor Expansion Limit (on node double click)</label>
+                            <input
+                                type="number"
+                                className="form-input"
+                                value={graphSettings.expansionLimit}
+                                onChange={e => setGraphSettings({ ...graphSettings, expansionLimit: parseInt(e.target.value) || 50 })}
+                                min="1"
+                                max="500"
+                            />
+                        </div>
+
+                        <div className="form-group">
                             <label className="form-label">Node Color Theme</label>
                             <select
                                 className="form-input"
@@ -531,7 +628,7 @@ export default function Home() {
 
 
                         <div className="form-group">
-                            <label className="form-label">Label Style</label>
+                            <label className="form-label">Node Label Style</label>
                             <select
                                 className="form-input"
                                 value={graphSettings.labelStyle || 'standard'}

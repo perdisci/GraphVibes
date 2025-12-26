@@ -62,17 +62,10 @@ export default async function handler(req, res) {
         };
 
         // Process initial results
+        // Process initial results
         items.forEach(item => {
-            if (item && item.id && item.label && !item.inVLabel) {
-                // It's a vertex
-                nodes.set(item.id, {
-                    id: item.id,
-                    label: item.label,
-                    properties: item.properties || {}
-                });
-            } else if (item && item.id && item.label && item.inV && item.outV) {
-                // It's an edge
-                // IMPORTANT: item.outV/inV might be Vertex objects, we need the scalar ID
+            if (item && item.id && item.label && item.inV && item.outV) {
+                // It's an edge (Check this FIRST because edges often lack inVLabel too, so they would match the vertex check)
                 const sId = getId(item.outV);
                 const tId = getId(item.inV);
 
@@ -84,9 +77,18 @@ export default async function handler(req, res) {
                     properties: item.properties || {}
                 });
 
-                // For direct edges in result, we might need to ensure nodes exist if they weren't returned
+                // For direct edges in result, ensure nodes exist placeholders
                 if (!nodes.has(sId)) nodes.set(sId, { id: sId, label: 'Unknown' });
                 if (!nodes.has(tId)) nodes.set(tId, { id: tId, label: 'Unknown' });
+
+            } else if (item && item.id && item.label) {
+                // It's a vertex (Matches if it matches schema and wasn't caught as an edge)
+                // Note: We removed !inVLabel check because it's simpler to just else-if after edge check
+                nodes.set(item.id, {
+                    id: item.id,
+                    label: item.label,
+                    properties: item.properties || {}
+                });
             }
         });
 
