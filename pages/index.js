@@ -981,13 +981,17 @@ export default function Home() {
                                 </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '0.75rem 1.5rem', fontSize: '0.9rem' }}>
                                     <div style={{ fontWeight: 600, opacity: 0.7 }}>Version</div>
-                                    <div>0.1.0</div>
+                                    <div>0.2.0</div>
                                     <div style={{ fontWeight: 600, opacity: 0.7 }}>Author</div>
                                     <div>Roberto Perdisci</div>
                                     <div style={{ fontWeight: 600, opacity: 0.7 }}>AI Coding Agent</div>
                                     <div>Gemini 3 Pro + Antigravity</div>
                                     <div style={{ fontWeight: 600, opacity: 0.7 }}>Stack</div>
-                                    <div>Next.js (Node v20.19.6), React Force Graph (v1.25.4), JanusGraph</div>
+                                    <div>
+                                        Next.js (12.3.4) • React (17.0.2)<br />
+                                        Gremlin (3.5.6) • ForceGraph (^1.29.0)<br />
+                                        Monaco Editor (^4.7.0) • Lucide Icons (^0.294.0)
+                                    </div>
                                     <div style={{ fontWeight: 600, opacity: 0.7 }}>License</div>
                                     <div>MIT</div>
                                 </div>
