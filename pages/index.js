@@ -224,6 +224,20 @@ export default function Home() {
         }
     };
 
+    // Node Label Preferences
+    const [nodeLabelPreferences, setNodeLabelPreferences] = useState({});
+
+    const handlePropertyClick = (nodeType, propertyKey) => {
+        if (!nodeType) return;
+        setNodeLabelPreferences(prev => {
+            const current = prev[nodeType];
+            // Toggle: if already selected, set to null (explicitly disabled, fallback to ID)
+            // If not selected or different, set to new key
+            const next = current === propertyKey ? null : propertyKey;
+            return { ...prev, [nodeType]: next };
+        });
+    };
+
     return (
         <div className="layout">
             <Head>
@@ -369,6 +383,7 @@ export default function Home() {
                             onMaximize={toggleMaximize}
                             isMaximized={isMaximized}
                             onSettings={() => setIsSettingsOpen(true)}
+                            nodeLabelPreferences={nodeLabelPreferences}
                         />
                     </div>
 
@@ -409,14 +424,35 @@ export default function Home() {
                                 <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.5rem' }}>PROPERTIES</div>
                                 {selectedElement.properties && Object.keys(selectedElement.properties).length > 0 ? (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                        {Object.entries(selectedElement.properties).map(([key, val]) => (
-                                            <div key={key} style={{ background: 'var(--surface-hover)', padding: '0.75rem', borderRadius: '6px' }}>
-                                                <div style={{ color: 'var(--accent)', fontSize: '0.8rem', marginBottom: '0.25rem' }}>{key}</div>
-                                                <div style={{ color: 'var(--text-main)', fontSize: '0.9rem', wordBreak: 'break-all' }}>
-                                                    {formatValue(val)}
+                                        {Object.entries(selectedElement.properties).map(([key, val]) => {
+                                            const isSelected = nodeLabelPreferences[selectedElement.label] === key;
+                                            const isDefault = !nodeLabelPreferences[selectedElement.label] && key === 'name';
+                                            const isActive = isSelected || (nodeLabelPreferences[selectedElement.label] === undefined && key === 'name');
+
+                                            return (
+                                                <div key={key} style={{ background: 'var(--surface-hover)', padding: '0.75rem', borderRadius: '6px' }}>
+                                                    <div
+                                                        style={{
+                                                            color: isActive ? 'var(--primary)' : 'var(--accent)',
+                                                            fontSize: '0.8rem',
+                                                            marginBottom: '0.25rem',
+                                                            cursor: 'pointer',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: '0.5rem'
+                                                        }}
+                                                        onClick={() => handlePropertyClick(selectedElement.label, key)}
+                                                        title="Click to use as node label"
+                                                    >
+                                                        {key}
+                                                        {isActive && <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--primary)' }} />}
+                                                    </div>
+                                                    <div style={{ color: 'var(--text-main)', fontSize: '0.9rem', wordBreak: 'break-all' }}>
+                                                        {formatValue(val)}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 ) : (
                                     <div style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>No properties</div>

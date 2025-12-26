@@ -15,7 +15,8 @@ const GraphViz = forwardRef(({
     dagMode,
     nodePalette,
     edgePalette,
-    labelStyle = 'glass'
+    labelStyle = 'glass',
+    nodeLabelPreferences = {}
 }, ref) => {
     const fgRef = useRef();
     const containerRef = useRef();
@@ -176,16 +177,31 @@ const GraphViz = forwardRef(({
 
                     // Determine text to show
                     let text = node.id;
-                    if (node.properties && node.properties.name) {
-                        const nameProp = node.properties.name;
-                        if (Array.isArray(nameProp) && nameProp.length > 0 && nameProp[0].value) {
-                            text = nameProp[0].value;
-                        } else if (typeof nameProp === 'string') {
-                            text = nameProp;
-                        } else if (nameProp.value) {
-                            text = nameProp.value;
+                    const prefKey = nodeLabelPreferences[node.label];
+
+                    // Logic:
+                    // 1. If explicit pref (prefKey is string), try to use it.
+                    // 2. If explicit disabled (prefKey is null), use ID (already set).
+                    // 3. If no pref (undefined), try 'name'.
+
+                    let keyToUse = null;
+                    if (prefKey !== undefined) {
+                        if (prefKey !== null) keyToUse = prefKey;
+                    } else {
+                        keyToUse = 'name';
+                    }
+
+                    if (keyToUse && node.properties && node.properties[keyToUse]) {
+                        const propVal = node.properties[keyToUse];
+                        if (Array.isArray(propVal) && propVal.length > 0 && propVal[0].value) {
+                            text = propVal[0].value;
+                        } else if (typeof propVal === 'string' || typeof propVal === 'number') {
+                            text = propVal;
+                        } else if (propVal.value) {
+                            text = propVal.value;
                         }
                     }
+
                     if (typeof text === 'object') text = JSON.stringify(text);
 
                     // Text setup
