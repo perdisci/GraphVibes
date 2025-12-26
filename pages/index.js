@@ -1,7 +1,7 @@
 import Head from 'next/head';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Play, Activity, Database, Layers, Banana, Copy, ExternalLink, Check, ZoomIn, ZoomOut, Maximize2, Minimize2, Settings, Focus, X, Link, AlertCircle, Loader } from 'lucide-react';
+import { Play, Activity, Database, Layers, Banana, Copy, ExternalLink, Check, ZoomIn, ZoomOut, Maximize2, Minimize2, Settings, Focus, X, Link, AlertCircle, Loader, Palette } from 'lucide-react';
 
 const GraphViz = dynamic(() => import('../components/GraphViz'), {
     ssr: false
@@ -30,6 +30,23 @@ export default function Home() {
         port: '8182'
     });
     const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'connected', 'connecting', 'disconnected'
+
+    // Theme Settings
+    const [theme, setTheme] = useState('dark');
+    const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
+
+    const THEME_CONFIG = {
+        dark: { background: '#0f111a', label: 'Dark Mode' },
+        light: { background: '#ffffff', label: 'Light Mode' },
+        midnight: { background: '#020617', label: 'Midnight' }
+    };
+
+    // Apply theme
+    useEffect(() => {
+        document.documentElement.setAttribute('data-theme', theme);
+        // Update graph background but preserve other settings
+        setGraphSettings(prev => ({ ...prev, backgroundColor: THEME_CONFIG[theme].background }));
+    }, [theme]);
 
     // Graph Settings
     const [graphSettings, setGraphSettings] = useState({
@@ -210,7 +227,7 @@ export default function Home() {
                 <div style={{ display: 'flex', gap: '1rem', marginLeft: 'auto', alignItems: 'center' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginRight: '0.5rem' }}>
                         {connectionStatus === 'connected' && (
-                            <span style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#4ade80' }}>
+                            <span style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--status-connected)' }}>
                                 <Activity size={14} /> Connected
                             </span>
                         )}
@@ -235,6 +252,14 @@ export default function Home() {
                         style={{ padding: '0.25rem' }}
                     >
                         <Link size={16} />
+                    </button>
+                    <button
+                        className="control-btn"
+                        onClick={() => setIsThemeModalOpen(true)}
+                        title="Change Theme"
+                        style={{ padding: '0.25rem' }}
+                    >
+                        <Palette size={16} />
                     </button>
                 </div>
             </header>
@@ -329,36 +354,23 @@ export default function Home() {
                     </div>
 
                     {!isMaximized && (
-                        <div style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'rgba(0,0,0,0.6)', padding: '0.5rem 1rem', borderRadius: '20px', fontSize: '0.8rem', color: '#94a3b8', backdropFilter: 'blur(4px)' }}>
+                        <div className="graph-status">
                             {data.nodes.length} Nodes • {data.links.length} Edges
                         </div>
                     )}
                     {selectedElement && (
-                        <div style={{
-                            position: 'absolute',
-                            top: 0,
-                            right: 0,
-                            bottom: 0,
-                            width: '300px',
-                            background: 'rgba(26, 29, 45, 0.95)',
-                            borderLeft: '1px solid #2f3446',
-                            backdropFilter: 'blur(10px)',
-                            padding: '1.5rem',
-                            overflowY: 'auto',
-                            boxShadow: '-4px 0 20px rgba(0,0,0,0.3)',
-                            animation: 'slideIn 0.3s ease-out'
-                        }}>
+                        <div className="detail-popup">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                                <h2 style={{ margin: 0, fontSize: '1.1rem', color: '#fff', textTransform: 'capitalize' }}>{selectedElement.type} Details</h2>
+                                <h2 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-main)', textTransform: 'capitalize' }}>{selectedElement.type} Details</h2>
                                 <button
                                     onClick={() => setSelectedElement(null)}
-                                    style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '1.2rem' }}
+                                    style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: '1.2rem' }}
                                 >×</button>
                             </div>
 
                             <div style={{ marginBottom: '1.5rem' }}>
-                                <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.25rem' }}>ID</div>
-                                <div style={{ fontFamily: 'monospace', color: '#fff' }}>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '0.25rem' }}>ID</div>
+                                <div style={{ fontFamily: 'monospace', color: 'var(--text-main)' }}>
                                     {typeof selectedElement.id === 'object'
                                         ? (selectedElement.id.relationId || JSON.stringify(selectedElement.id))
                                         : selectedElement.id}
@@ -367,7 +379,7 @@ export default function Home() {
 
                             {selectedElement.label && (
                                 <div style={{ marginBottom: '1.5rem' }}>
-                                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.25rem' }}>LABEL</div>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '0.25rem' }}>LABEL</div>
                                     <div style={{ display: 'inline-block', padding: '0.25rem 0.5rem', borderRadius: '4px', background: selectedElement.color || '#6366f1', color: '#fff', fontSize: '0.85rem' }}>
                                         {selectedElement.label}
                                     </div>
@@ -379,16 +391,16 @@ export default function Home() {
                                 {selectedElement.properties && Object.keys(selectedElement.properties).length > 0 ? (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                         {Object.entries(selectedElement.properties).map(([key, val]) => (
-                                            <div key={key} style={{ background: 'rgba(0,0,0,0.2)', padding: '0.75rem', borderRadius: '6px' }}>
-                                                <div style={{ color: '#d946ef', fontSize: '0.8rem', marginBottom: '0.25rem' }}>{key}</div>
-                                                <div style={{ color: '#e2e8f0', fontSize: '0.9rem', wordBreak: 'break-all' }}>
+                                            <div key={key} style={{ background: 'var(--surface-hover)', padding: '0.75rem', borderRadius: '6px' }}>
+                                                <div style={{ color: 'var(--accent)', fontSize: '0.8rem', marginBottom: '0.25rem' }}>{key}</div>
+                                                <div style={{ color: 'var(--text-main)', fontSize: '0.9rem', wordBreak: 'break-all' }}>
                                                     {formatValue(val)}
                                                 </div>
                                             </div>
                                         ))}
                                     </div>
                                 ) : (
-                                    <div style={{ color: '#64748b', fontStyle: 'italic' }}>No properties</div>
+                                    <div style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>No properties</div>
                                 )}
                             </div>
                         </div>
@@ -510,6 +522,42 @@ export default function Home() {
                             >
                                 Save & Connect
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {isThemeModalOpen && (
+                <div className="modal-overlay" onClick={() => setIsThemeModalOpen(false)}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ width: '300px' }}>
+                        <div className="modal-header">
+                            <h3 className="modal-title">Select Theme</h3>
+                            <button className="control-btn" onClick={() => setIsThemeModalOpen(false)}>
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {Object.entries(THEME_CONFIG).map(([key, config]) => (
+                                <button
+                                    key={key}
+                                    onClick={() => { setTheme(key); setIsThemeModalOpen(false); }}
+                                    style={{
+                                        padding: '1rem',
+                                        background: theme === key ? 'var(--primary)' : 'var(--surface-hover)',
+                                        border: '1px solid var(--border)',
+                                        borderRadius: '6px',
+                                        color: theme === key ? 'white' : 'var(--text-main)',
+                                        cursor: 'pointer',
+                                        textAlign: 'left',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem'
+                                    }}
+                                >
+                                    <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: config.background, border: '1px solid #666' }}></div>
+                                    {config.label}
+                                </button>
+                            ))}
                         </div>
                     </div>
                 </div>

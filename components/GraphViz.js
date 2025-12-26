@@ -170,18 +170,7 @@ const GraphViz = forwardRef(({
 
             {/* Legend */}
             <div className="graph-legend" style={{
-                position: 'absolute',
-                top: '1rem',
-                left: '1rem',
-                background: 'rgba(15, 23, 42, 0.9)',
-                border: '1px solid #1e293b',
-                borderRadius: '8px',
-                padding: '0.4rem',
-                color: '#e2e8f0',
-                fontSize: '0.75rem',
-                backdropFilter: 'blur(4px)',
                 width: isLegendOpen ? '180px' : 'auto',
-                transition: 'all 0.3s ease'
             }}>
                 <div
                     style={{
@@ -201,7 +190,7 @@ const GraphViz = forwardRef(({
                     <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
                         {/* Nodes */}
                         <div style={{ marginBottom: '0.75rem' }}>
-                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Nodes</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Nodes</div>
                             {Array.from(new Set(data.nodes.map(n => n.label))).map(label => (
                                 <div key={`node-${label}`} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
                                     <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: getNodeColor({ label }) }} />
@@ -212,7 +201,7 @@ const GraphViz = forwardRef(({
 
                         {/* Edges */}
                         <div>
-                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Edges</div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Edges</div>
                             {Array.from(new Set(data.links.map(l => l.label))).map(label => (
                                 <div key={`link-${label}`} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
                                     <div style={{ width: '12px', height: '2px', background: getLinkColor({ label }) }} />
