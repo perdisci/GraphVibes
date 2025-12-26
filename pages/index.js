@@ -324,7 +324,7 @@ export default function Home() {
     return (
         <div className="layout">
             <Head>
-                <title>GraphVibes — JanusGraph Visualizer</title>
+                <title>Graph.Vibes — JanusGraph Visualizer</title>
                 <meta name="description" content="Modern GraphVibes Visualizer" />
             </Head>
 
@@ -335,7 +335,7 @@ export default function Home() {
                         alt="GraphVibes"
                         style={{ height: '54px', borderRadius: '8px' }}
                     />
-                    GraphVibes — JanusGraph Visualizer
+                    Graph.Vibes — JanusGraph Visualizer
                 </div>
                 <div style={{ display: 'flex', gap: '1rem', marginLeft: 'auto', alignItems: 'center' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginRight: '0.5rem' }}>

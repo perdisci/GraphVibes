@@ -1,6 +1,6 @@
-# GraphVibes - JanusGraph Visualizer
+# Graph.Vibes - JanusGraph Visualizer
 
-**GraphVibes** is a modern, interactive web-based visualizer for [JanusGraph](https://janusgraph.org/), built with [Next.js](https://nextjs.org/) and [react-force-graph](https://github.com/vasturiano/react-force-graph).
+**Graph.Vibes** is a modern, interactive web-based visualizer for [JanusGraph](https://janusgraph.org/), built with [Next.js](https://nextjs.org/) and [react-force-graph](https://github.com/vasturiano/react-force-graph).
 
 It provides a powerful interface to write Gremlin queries, visualize the results as a force-directed graph, and explore your data with advanced interactive features.
 
