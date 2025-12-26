@@ -1,6 +1,6 @@
 import React, { forwardRef, useRef, useImperativeHandle, useState } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
-import { ZoomIn, ZoomOut, Focus, Maximize2, Minimize2, Settings, RotateCcw } from 'lucide-react';
+import { ZoomIn, ZoomOut, Focus, Maximize2, Minimize2, Settings, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
 
 const GraphViz = forwardRef(({
     data,
@@ -17,6 +17,61 @@ const GraphViz = forwardRef(({
     const fgRef = useRef();
     const containerRef = useRef();
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+    const [isLegendOpen, setIsLegendOpen] = useState(true);
+
+    // Custom Color Palette
+    const COLOR_PALETTE = [
+        '#ef4444', // red-500
+        '#f97316', // orange-500
+        '#f59e0b', // amber-500
+        '#84cc16', // lime-500
+        '#10b981', // emerald-500
+        '#06b6d4', // cyan-500
+        '#3b82f6', // blue-500
+        '#6366f1', // indigo-500
+        '#8b5cf6', // violet-500
+        '#d946ef', // fuchsia-500
+        '#ec4899', // pink-500
+        '#f43f5e', // rose-500
+        '#14b8a6', // teal-500
+        '#a855f7', // purple-500
+        '#22c55e', // green-500
+        '#eab308', // yellow-500
+        '#0ea5e9', // sky-500
+        '#64748b', // slate-500
+    ];
+
+    // Memoize the color mapping to ensure consistency
+    const colorMap = React.useMemo(() => {
+        const map = {};
+        let colorIndex = 0;
+
+        const getColor = (label) => {
+            if (!map[label]) {
+                map[label] = COLOR_PALETTE[colorIndex % COLOR_PALETTE.length];
+                colorIndex++;
+            }
+            return map[label];
+        };
+
+        if (data) {
+            data.nodes.forEach(node => getColor(node.label));
+            data.links.forEach(link => getColor(link.label));
+        }
+
+        return map;
+    }, [data]);
+
+    // Derived color accessors
+    const getNodeColor = (node) => {
+        if (nodeColor) return nodeColor; // User override
+        return colorMap[node.label] || '#94a3b8';
+    };
+
+    const getLinkColor = (link) => {
+        if (linkColor) return linkColor; // User override
+        return colorMap[link.label] || '#475569';
+    };
 
     React.useEffect(() => {
         if (!containerRef.current) return;
@@ -99,12 +154,11 @@ const GraphViz = forwardRef(({
                 height={dimensions.height}
                 graphData={data}
                 nodeLabel="label"
-                nodeAutoColorBy="label"
-                nodeColor={nodeColor}
+                nodeColor={getNodeColor}
                 linkDirectionalArrowLength={3.5}
                 linkDirectionalArrowRelPos={1}
                 backgroundColor={backgroundColor || "#0f111a"}
-                linkColor={linkColor ? (() => linkColor) : (() => '#2f3446')}
+                linkColor={getLinkColor}
                 nodeRelSize={6}
                 onNodeClick={onNodeClick}
                 onLinkClick={onLinkClick}
@@ -113,6 +167,62 @@ const GraphViz = forwardRef(({
                 dagMode={dagMode}
                 dagLevelDistance={50}
             />}
+
+            {/* Legend */}
+            <div className="graph-legend" style={{
+                position: 'absolute',
+                top: '1rem',
+                left: '1rem',
+                background: 'rgba(15, 23, 42, 0.9)',
+                border: '1px solid #1e293b',
+                borderRadius: '8px',
+                padding: '0.4rem',
+                color: '#e2e8f0',
+                fontSize: '0.75rem',
+                backdropFilter: 'blur(4px)',
+                width: isLegendOpen ? '180px' : 'auto',
+                transition: 'all 0.3s ease'
+            }}>
+                <div
+                    style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        cursor: 'pointer',
+                        marginBottom: isLegendOpen ? '0.5rem' : '0'
+                    }}
+                    onClick={() => setIsLegendOpen(!isLegendOpen)}
+                >
+                    <span style={{ fontWeight: '600' }}>Legend</span>
+                    {isLegendOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </div>
+
+                {isLegendOpen && data && (
+                    <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                        {/* Nodes */}
+                        <div style={{ marginBottom: '0.75rem' }}>
+                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Nodes</div>
+                            {Array.from(new Set(data.nodes.map(n => n.label))).map(label => (
+                                <div key={`node-${label}`} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: getNodeColor({ label }) }} />
+                                    <span>{label}</span>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Edges */}
+                        <div>
+                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Edges</div>
+                            {Array.from(new Set(data.links.map(l => l.label))).map(label => (
+                                <div key={`link-${label}`} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                                    <div style={{ width: '12px', height: '2px', background: getLinkColor({ label }) }} />
+                                    <span>{label}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
 
             <div className="graph-controls">
                 <button className="control-btn" onClick={handleZoomIn} title="Zoom In"><ZoomIn size={18} /></button>
