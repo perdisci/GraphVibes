@@ -1,7 +1,7 @@
 import Head from 'next/head';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Play, Activity, Database, Layers, Banana, Copy, ExternalLink, Check, ZoomIn, ZoomOut, Maximize2, Minimize2, Settings, Focus, X, Link, AlertCircle, Loader, Palette, Info } from 'lucide-react';
+import { Play, Activity, Database, Layers, Banana, Copy, ExternalLink, Check, ZoomIn, ZoomOut, Maximize2, Minimize2, Settings, Focus, X, Link, AlertCircle, Loader, Palette, Info, ChevronUp, ChevronDown, GripHorizontal } from 'lucide-react';
 import { GRAPH_PALETTES } from '../utils/palettes';
 
 const GraphViz = dynamic(() => import('../components/GraphViz'), {
@@ -29,6 +29,11 @@ export default function Home() {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
     const [isConnectionModalOpen, setIsConnectionModalOpen] = useState(false);
+
+    // Sidebar UI State
+    const [queryEditorHeight, setQueryEditorHeight] = useState(120);
+    const [isResizingQuery, setIsResizingQuery] = useState(false);
+    const [isResultsCollapsed, setIsResultsCollapsed] = useState(false);
 
     // Connection Settings
     const [connectionSettings, setConnectionSettings] = useState({
@@ -85,7 +90,21 @@ export default function Home() {
                 setSidebarWidth(newWidth);
             }
         }
-    }, [isResizing]);
+        if (isResizingQuery) {
+            // Calculate new height based on mouse Y relative to sidebar top
+            // This is a bit tricky without ref to top, but let's approximate or use movementY
+            // Be simpler: Just rely on mouse position if we know header height (~60px) + check connection logic
+            // providing a "delta" approach is often safer if we don't have absolute positioning refs easily
+            // Let's use strict offset from sidebarRef
+            if (sidebarRef.current) {
+                const sidebarRect = sidebarRef.current.getBoundingClientRect();
+                const newHeight = mouseMoveEvent.clientY - sidebarRect.top - 40; // 40px for header/margin offset approx
+                if (newHeight > 100 && newHeight < (window.innerHeight - 200)) {
+                    setQueryEditorHeight(newHeight);
+                }
+            }
+        }
+    }, [isResizing, isResizingQuery]);
 
     useEffect(() => {
         window.addEventListener('mousemove', resize);
@@ -95,6 +114,36 @@ export default function Home() {
             window.removeEventListener('mouseup', stopResizing);
         };
     }, [resize, stopResizing]);
+
+    const startResizingQuery = useCallback((e) => {
+        e.stopPropagation(); // Prevent sidebar resize
+        setIsResizingQuery(true);
+    }, []);
+
+    const stopResizingQuery = useCallback(() => {
+        setIsResizingQuery(false);
+    }, []);
+
+    // Merge stop resizing
+    useEffect(() => {
+        window.addEventListener('mouseup', stopResizingQuery);
+        return () => window.removeEventListener('mouseup', stopResizingQuery);
+    }, [stopResizingQuery]);
+
+    useEffect(() => {
+        // Initial balance of sidebar
+        // We delay slightly to ensure layout is settled
+        const timer = setTimeout(() => {
+            if (sidebarRef.current) {
+                const height = sidebarRef.current.clientHeight;
+                // Subtract buffer for headers (approx 40px each) and resize handle (~12px)
+                // Total static height ≈ 92px. Safeguard with 120px buffer.
+                const availableHeight = height - 120;
+                setQueryEditorHeight(Math.max(100, availableHeight / 2));
+            }
+        }, 0);
+        return () => clearTimeout(timer);
+    }, []);
 
     // Graph Controls
     const handleZoomIn = () => {
@@ -192,26 +241,6 @@ export default function Home() {
         }
     };
 
-    // Double-click detection
-    const clickTimeoutRef = useRef(null);
-
-    const handleNodeClick = (node) => {
-        if (clickTimeoutRef.current) {
-            // Double Click detected
-            clearTimeout(clickTimeoutRef.current);
-            clickTimeoutRef.current = null;
-            expandNode(node);
-        } else {
-            // Potential Single Click - wait 300ms
-            clickTimeoutRef.current = setTimeout(() => {
-                setSelectedElement({ ...node, type: 'node' }); // Explicitly set type 'node'
-                clickTimeoutRef.current = null;
-            }, 300);
-        }
-        // Always log for debugging if needed
-        console.log('Clicked node:', node.id);
-    };
-
     const fetchAndMerge = async (query) => {
         setLoading(true);
         setError(null);
@@ -265,7 +294,7 @@ export default function Home() {
         }
     };
 
-    const expandNode = (node) => {
+    const expandNode = useCallback((node) => {
         // Query to get neighbors and edges
         // We use store/cap/unfold to get a mixed stream of edges and vertices
         // Quote ID if string to be safe
@@ -276,10 +305,101 @@ export default function Home() {
         const query = `g.V(${safeId}).bothE().limit(${limit}).store('res').otherV().store('res').cap('res').unfold()`;
 
         fetchAndMerge(query);
-    };
+    }, [graphSettings.expansionLimit, connectionSettings]);
 
-    const handleLinkClick = (link) => {
-        setSelectedElement({ ...link, type: 'edge' });
+    // Double-click detection
+    const clickTimeoutRef = useRef(null);
+    const lastClickRef = useRef(null);
+
+    const handleNodeClick = useCallback((node) => {
+        const now = Date.now();
+        const DOUBLE_CLICK_DELAY = 300;
+
+        if (lastClickRef.current && (now - lastClickRef.current < DOUBLE_CLICK_DELAY)) {
+            // Double click detected
+            if (clickTimeoutRef.current) {
+                clearTimeout(clickTimeoutRef.current);
+                clickTimeoutRef.current = null;
+            }
+            expandNode(node);
+        } else {
+            // Single click - set timeout
+            lastClickRef.current = now;
+            clickTimeoutRef.current = setTimeout(() => {
+                setSelectedElement(node);
+                setIsDetailOpen(true);
+            }, DOUBLE_CLICK_DELAY);
+        }
+    }, [expandNode]);
+
+    const handleLinkClick = useCallback((link) => {
+        setSelectedElement(link);
+    }, []);
+
+    const handleEditorDidMount = (editor, monaco) => {
+        // Register Gremlin completion provider
+        monaco.languages.registerCompletionItemProvider('javascript', {
+            triggerCharacters: ['.'],
+            provideCompletionItems: (model, position) => {
+                const word = model.getWordUntilPosition(position);
+                const range = {
+                    startLineNumber: position.lineNumber,
+                    endLineNumber: position.lineNumber,
+                    startColumn: word.startColumn,
+                    endColumn: word.endColumn,
+                };
+
+                const gremlinSteps = [
+                    { label: 'V', detail: 'Vertices', documentation: 'Selects all vertices in the graph.' },
+                    { label: 'E', detail: 'Edges', documentation: 'Selects all edges in the graph.' },
+                    { label: 'has', detail: 'Filter Property', documentation: 'Filters elements by property value.' },
+                    { label: 'hasLabel', detail: 'Filter Label', documentation: 'Filters elements by label.' },
+                    { label: 'hasId', detail: 'Filter ID', documentation: 'Filters elements by ID.' },
+                    { label: 'out', detail: 'Out Adjacent', documentation: 'Moves to the outgoing adjacent vertices.' },
+                    { label: 'in', detail: 'In Adjacent', documentation: 'Moves to the incoming adjacent vertices.' },
+                    { label: 'both', detail: 'Both Adjacent', documentation: 'Moves to both incoming and outgoing adjacent vertices.' },
+                    { label: 'outE', detail: 'Out Incident Edges', documentation: 'Moves to the outgoing incident edges.' },
+                    { label: 'inE', detail: 'In Incident Edges', documentation: 'Moves to the incoming incident edges.' },
+                    { label: 'bothE', detail: 'Both Incident Edges', documentation: 'Moves to both incoming and outgoing incident edges.' },
+                    { label: 'values', detail: 'Property Values', documentation: 'Extracts the values of properties.' },
+                    { label: 'valueMap', detail: 'Property Map', documentation: 'Extracts the properties as a map.' },
+                    { label: 'limit', detail: 'Limit Results', documentation: 'Limits the number of results.' },
+                    { label: 'count', detail: 'Count Results', documentation: 'Counts the number of results.' },
+                    { label: 'order', detail: 'Order Results', documentation: 'Orders the results.' },
+                    { label: 'by', detail: 'Order By', documentation: 'Specifies the property to order by.' },
+                    { label: 'path', detail: 'Path', documentation: 'Returns the path context.' },
+                    { label: 'simplePath', detail: 'Simple Path', documentation: 'Filters simple paths (no repeated vertices).' },
+                    { label: 'dedup', detail: 'Deduplicate', documentation: 'Removes duplicates.' },
+                    { label: 'where', detail: 'Filter Traversal', documentation: 'Filters the traversal based on a predicate.' },
+                    { label: 'not', detail: 'Negate', documentation: 'Negates a traversal step.' },
+                    { label: 'drop', detail: 'Delete', documentation: 'Removes the element from the graph.' },
+                    { label: 'addV', detail: 'Add Vertex', documentation: 'Adds a vertex to the graph.' },
+                    { label: 'addE', detail: 'Add Edge', documentation: 'Adds an edge to the graph.' },
+                    { label: 'property', detail: 'Set Property', documentation: 'Sets a property value.' },
+                ];
+
+                const suggestions = gremlinSteps.map(step => ({
+                    label: step.label,
+                    kind: monaco.languages.CompletionItemKind.Method,
+                    documentation: step.documentation,
+                    detail: step.detail,
+                    insertText: step.label,
+                    range: range
+                }));
+
+                // Add snippets
+                suggestions.push({
+                    label: 'g.V().limit(50)',
+                    kind: monaco.languages.CompletionItemKind.Snippet,
+                    documentation: 'Get first 50 vertices',
+                    insertText: 'g.V().limit(50)',
+                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                    range: range
+                });
+
+                return { suggestions: suggestions };
+            }
+        });
     };
 
     const formatValue = (val) => {
@@ -391,19 +511,34 @@ export default function Home() {
             </header>
 
             <main className="main-content" style={{ gridTemplateColumns: isMaximized ? '0px 0px 1fr' : `${sidebarWidth}px 4px 1fr` }}>
-                <div className="sidebar" ref={sidebarRef} style={{ display: isMaximized ? 'none' : 'flex' }}>
-                    <div className="query-editor">
-                        <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="sidebar" ref={sidebarRef} style={{ display: isMaximized ? 'none' : 'flex', flexDirection: 'column' }}>
+                    {/* Query Editor Section */}
+                    <div className="query-editor" style={{
+                        flex: isResultsCollapsed ? '1' : 'none',
+                        height: isResultsCollapsed ? 'auto' : 'auto',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        minHeight: isResultsCollapsed ? '0' : 'auto'
+                    }}>
+                        <div style={{ marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <h3 style={{ margin: 0, fontSize: '0.9rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                 <Database size={14} /> GREMLIN QUERY
                             </h3>
                         </div>
-                        <div style={{ height: '120px', border: '1px solid var(--border)', borderRadius: '4px', overflow: 'hidden', marginBottom: '1rem' }}>
+                        <div style={{
+                            height: isResultsCollapsed ? '100%' : `${queryEditorHeight}px`,
+                            border: '1px solid var(--border)',
+                            borderRadius: '4px',
+                            overflow: 'hidden',
+                            marginBottom: '0.5rem',
+                            transition: isResizingQuery ? 'none' : 'height 0.2s ease'
+                        }}>
                             <Editor
                                 height="100%"
                                 defaultLanguage="javascript"
                                 value={query}
                                 onChange={(value) => setQuery(value)}
+                                onMount={handleEditorDidMount}
                                 theme={theme === 'light' ? 'light' : 'vs-dark'}
                                 options={{
                                     minimap: { enabled: false },
@@ -417,55 +552,91 @@ export default function Home() {
                                 }}
                             />
                         </div>
-                        <button className="btn" onClick={handleRunQuery} disabled={loading} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
+                        <button className="btn" onClick={handleRunQuery} disabled={loading} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
                             {loading ? 'Running...' : <><Play size={16} /> Run Query</>}
                         </button>
                         {error && (
-                            <div style={{ marginTop: '1rem', padding: '0.5rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '4px', color: '#ef4444', fontSize: '0.85rem' }}>
+                            <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '4px', color: '#ef4444', fontSize: '0.85rem' }}>
                                 {error}
                             </div>
                         )}
                     </div>
 
-                    <div className="results-panel">
-                        <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <h3 style={{ margin: 0, fontSize: '0.9rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <Layers size={14} /> RAW RESULTS
-                            </h3>
-                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                <button
-                                    onClick={handleCopy}
-                                    title="Copy raw JSON"
-                                    style={{
-                                        background: 'none',
-                                        border: 'none',
-                                        color: copied ? '#4ade80' : '#94a3b8',
-                                        cursor: 'pointer',
-                                        padding: '4px',
-                                        display: 'flex',
-                                        alignItems: 'center'
-                                    }}
-                                >
-                                    {copied ? <Check size={14} /> : <Copy size={14} />}
-                                </button>
-                                <button
-                                    onClick={handleMaximize}
-                                    title="Open locally in new tab"
-                                    style={{
-                                        background: 'none',
-                                        border: 'none',
-                                        color: '#94a3b8',
-                                        cursor: 'pointer',
-                                        padding: '4px',
-                                        display: 'flex',
-                                        alignItems: 'center'
-                                    }}
-                                >
-                                    <ExternalLink size={14} />
-                                </button>
-                            </div>
+                    {/* Resize Handle */}
+                    {!isResultsCollapsed && (
+                        <div
+                            onMouseDown={startResizingQuery}
+                            style={{
+                                height: '12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'row-resize',
+                                color: 'var(--border)',
+                                marginBottom: '0.5rem'
+                            }}
+                        >
+                            <GripHorizontal size={14} />
                         </div>
-                        <pre>{raw ? JSON.stringify(raw, null, 2) : '// Results will appear here'}</pre>
+                    )}
+
+                    {/* Results Panel Section */}
+                    <div className="results-panel" style={{
+                        flex: isResultsCollapsed ? '0 0 auto' : '1',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        overflow: 'hidden',
+                        transition: 'flex 0.2s ease'
+                    }}>
+                        <div style={{ marginBottom: isResultsCollapsed ? '0' : '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div
+                                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}
+                                onClick={() => setIsResultsCollapsed(!isResultsCollapsed)}
+                            >
+                                <h3 style={{ margin: 0, fontSize: '0.9rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <Layers size={14} /> RAW RESULTS
+                                </h3>
+                                {isResultsCollapsed ? <ChevronUp size={14} color="#94a3b8" /> : <ChevronDown size={14} color="#94a3b8" />}
+                            </div>
+
+                            {!isResultsCollapsed && (
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <button
+                                        onClick={handleCopy}
+                                        title="Copy raw JSON"
+                                        style={{
+                                            background: 'none',
+                                            border: 'none',
+                                            color: copied ? '#4ade80' : '#94a3b8',
+                                            cursor: 'pointer',
+                                            padding: '4px',
+                                            display: 'flex',
+                                            alignItems: 'center'
+                                        }}
+                                    >
+                                        {copied ? <Check size={14} /> : <Copy size={14} />}
+                                    </button>
+                                    <button
+                                        onClick={handleMaximize}
+                                        title="Open locally in new tab"
+                                        style={{
+                                            background: 'none',
+                                            border: 'none',
+                                            color: '#94a3b8',
+                                            cursor: 'pointer',
+                                            padding: '4px',
+                                            display: 'flex',
+                                            alignItems: 'center'
+                                        }}
+                                    >
+                                        <ExternalLink size={14} />
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                        {!isResultsCollapsed && (
+                            <pre style={{ flex: 1, overflow: 'auto', margin: 0 }}>{raw ? JSON.stringify(raw, null, 2) : '// Results will appear here'}</pre>
+                        )}
                     </div>
                 </div>
 
