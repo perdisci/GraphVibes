@@ -19,11 +19,11 @@
   --surface: #f1f5f9;
   --surface-hover: #e2e8f0;
   --border: #cbd5e1;
-  --primary: #4f46e5;
-  --primary-glow: rgba(79, 70, 229, 0.3);
+  --primary: #2563eb;
+  --primary-glow: rgba(37, 99, 235, 0.3);
   --text-main: #0f172a;
   --text-dim: #64748b;
-  --accent: #d946ef;
+  --accent: #0ea5e9;
   --glass-bg: rgba(255, 255, 255, 0.9);
   --glass-border: rgba(203, 213, 225, 0.6);
   --shadow-color: rgba(0, 0, 0, 0.1);
@@ -80,7 +80,7 @@ body {
 
 .layout {
   display: grid;
-  grid-template-rows: 60px 1fr;
+  grid-template-rows: 80px 1fr;
   height: 100vh;
   width: 100vw;
 }
@@ -96,8 +96,10 @@ body {
 }
 
 .logo {
-  font-size: 1.25rem;
-  font-weight: 700;
+  font-size: 1.5rem;
+  letter-spacing: -0.02em;
+  font-weight: 800;
+  font-style: italic;
   background: linear-gradient(to right, var(--primary), var(--accent));
   -webkit-background-clip: text;
   background-clip: text;

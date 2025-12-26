@@ -33,7 +33,7 @@ export default function Home() {
     const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'connected', 'connecting', 'disconnected'
 
     // Theme Settings
-    const [theme, setTheme] = useState('dark');
+    const [theme, setTheme] = useState('light');
     const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
 
     const THEME_CONFIG = {
@@ -51,7 +51,7 @@ export default function Home() {
 
     // Graph Settings
     const [graphSettings, setGraphSettings] = useState({
-        backgroundColor: '#0f111a',
+        backgroundColor: '#ffffff',
         nodeColor: '', // default auto
         linkColor: '',  // default auto
         layoutMode: null, // null (force), td, bu, lr, rl, radialout, radialin
@@ -233,7 +233,12 @@ export default function Home() {
 
             <header className="header">
                 <div className="logo" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Banana size={24} color="#d946ef" /> GraphVibes.
+                    <img
+                        src={theme === 'light' ? '/GraphVibes-Logo-Light.png' : '/GraphVibes-Logo-Dark.png'}
+                        alt="GraphVibes"
+                        style={{ height: '54px', borderRadius: '8px' }}
+                    />
+                    GraphVibes
                 </div>
                 <div style={{ display: 'flex', gap: '1rem', marginLeft: 'auto', alignItems: 'center' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginRight: '0.5rem' }}>
