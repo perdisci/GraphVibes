@@ -150,6 +150,7 @@ export default function Home() {
 
     const [selectedElement, setSelectedElement] = useState(null);
     const [copied, setCopied] = useState(false);
+    const [copiedProperty, setCopiedProperty] = useState(null);
 
     // UI State
     const [sidebarWidth, setSidebarWidth] = useState(320);
@@ -1105,8 +1106,32 @@ export default function Home() {
                                                         {key}
                                                         {isActive && <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--primary)' }} />}
                                                     </div>
-                                                    <div style={{ color: 'var(--text-main)', fontSize: '0.9rem', wordBreak: 'break-all' }}>
-                                                        {formatValue(val)}
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                                                        <div style={{ color: 'var(--text-main)', fontSize: '0.9rem', wordBreak: 'break-all' }}>
+                                                            {formatValue(val)}
+                                                        </div>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                const textToCopy = formatValue(val);
+                                                                navigator.clipboard.writeText(textToCopy);
+                                                                setCopiedProperty(key);
+                                                                setTimeout(() => setCopiedProperty(null), 2000);
+                                                            }}
+                                                            title={copiedProperty === key ? "Copied!" : "Copy value"}
+                                                            style={{
+                                                                background: 'transparent',
+                                                                border: 'none',
+                                                                color: copiedProperty === key ? '#4ade80' : 'var(--text-dim)',
+                                                                cursor: 'pointer',
+                                                                padding: '2px',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                flexShrink: 0
+                                                            }}
+                                                        >
+                                                            {copiedProperty === key ? <Check size={12} /> : <Copy size={12} />}
+                                                        </button>
                                                     </div>
                                                 </div>
                                             );
