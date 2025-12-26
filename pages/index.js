@@ -1,7 +1,7 @@
 import Head from 'next/head';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Play, Activity, Database, Layers, Banana, Copy, ExternalLink, Check, ZoomIn, ZoomOut, Maximize2, Minimize2, Settings, Focus, X, Link, AlertCircle, Loader, Palette, Info, ChevronUp, ChevronDown, GripHorizontal, Timer } from 'lucide-react';
+import { Play, Activity, Database, Layers, Banana, Copy, ExternalLink, Check, ZoomIn, ZoomOut, Maximize2, Minimize2, Settings, Focus, X, Link, AlertCircle, Loader, Palette, Info, ChevronUp, ChevronDown, GripHorizontal, Timer, BookOpen } from 'lucide-react';
 import { GRAPH_PALETTES } from '../utils/palettes';
 
 const GraphViz = dynamic(() => import('../components/GraphViz'), {
@@ -104,11 +104,46 @@ const formatProfileData = (rawData) => {
     return output;
 };
 
+
+
+const formatExplainData = (rawData) => {
+    // 1. Parse GraphSON if present
+    const parsed = parseGraphSON(rawData);
+
+    // 2. Extract explanation object (usually in an array)
+    let explainObj = parsed;
+    if (Array.isArray(parsed) && parsed.length > 0) {
+        explainObj = parsed[0];
+    }
+
+    // Fallback if not standard structure
+    if (!explainObj) return JSON.stringify(parsed, null, 2);
+
+    // Try to format nicely if it has expected fields
+    let output = '';
+
+    if (explainObj.original) {
+        output += 'Original Traversal\n' + '=============================================================================================================\n';
+        // original might be array or string
+        const orig = Array.isArray(explainObj.original) ? explainObj.original.join('\n') : explainObj.original;
+        output += (orig || '') + '\n\n';
+    }
+
+    if (explainObj.final) {
+        output += 'Final Traversal\n' + '=============================================================================================================\n';
+        const final = Array.isArray(explainObj.final) ? explainObj.final.join('\n') : explainObj.final;
+        output += (final || '') + '\n\n';
+    }
+
+    return output || JSON.stringify(explainObj, null, 2);
+};
+
 export default function Home() {
     const [query, setQuery] = useState('// Click on Run Query to execute\ng.V().limit(50)');
     const [data, setData] = useState({ nodes: [], links: [] });
     const [raw, setRaw] = useState(null);
     const [profilingData, setProfilingData] = useState(null);
+    const [explanationData, setExplanationData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
@@ -128,6 +163,7 @@ export default function Home() {
     const [isResizingQuery, setIsResizingQuery] = useState(false);
     const [isResultsCollapsed, setIsResultsCollapsed] = useState(false);
     const [isProfilingCollapsed, setIsProfilingCollapsed] = useState(true);
+    const [isExplanationCollapsed, setIsExplanationCollapsed] = useState(true);
 
     // Connection Settings
     const [connectionSettings, setConnectionSettings] = useState({
@@ -323,6 +359,7 @@ export default function Home() {
         setError(null);
         setSelectedElement(null);
         setProfilingData(null);
+        setExplanationData(null);
 
         try {
             // 1. Run Main Query
@@ -366,6 +403,29 @@ export default function Home() {
                 }
             } catch (profileErr) {
                 console.warn("Profiling execution error", profileErr);
+            }
+
+            // 3. Run Explanation Query
+            const explanationQuery = `${cleanQuery}.explain()`;
+            try {
+                const explainRes = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query: explanationQuery,
+                        host: connectionSettings.host,
+                        port: connectionSettings.port
+                    }),
+                });
+
+                if (explainRes.ok) {
+                    const explainResult = await explainRes.json();
+                    setExplanationData(explainResult.raw);
+                } else {
+                    console.warn("Explanation failed", await explainRes.text());
+                }
+            } catch (explainErr) {
+                console.warn("Explanation execution error", explainErr);
             }
 
         } catch (err) {
@@ -780,6 +840,75 @@ export default function Home() {
                             )}
                         </div>
 
+                        {/* Explanation Panel Section */}
+                        <div className="explanation-panel" style={{
+                            flex: isExplanationCollapsed ? '0 0 auto' : '1',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            overflow: 'hidden',
+                            transition: 'flex 0.2s ease',
+                            background: 'var(--surface)',
+                            padding: '1rem',
+                            borderTop: '1px solid var(--border)'
+                        }}>
+                            <div style={{ marginBottom: isExplanationCollapsed ? '0' : '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div
+                                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}
+                                    onClick={() => setIsExplanationCollapsed(!isExplanationCollapsed)}
+                                >
+                                    <h3 style={{ margin: 0, fontSize: '0.9rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <BookOpen size={14} /> QUERY EXPLANATION
+                                    </h3>
+                                    {isExplanationCollapsed ? <ChevronUp size={14} color="#94a3b8" /> : <ChevronDown size={14} color="#94a3b8" />}
+                                </div>
+
+                                {!isExplanationCollapsed && (
+                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                        <button
+                                            onClick={() => navigator.clipboard.writeText(JSON.stringify(explanationData, null, 2))}
+                                            title="Copy explanation JSON"
+                                            style={{
+                                                background: 'none',
+                                                border: 'none',
+                                                color: '#94a3b8',
+                                                cursor: 'pointer',
+                                                padding: '4px',
+                                                display: 'flex',
+                                                alignItems: 'center'
+                                            }}
+                                        >
+                                            <Copy size={14} />
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                const text = formatExplainData(explanationData);
+                                                const blob = new Blob([text], { type: 'text/plain' });
+                                                const url = URL.createObjectURL(blob);
+                                                window.open(url, '_blank');
+                                            }}
+                                            title="Open locally in new tab"
+                                            style={{
+                                                background: 'none',
+                                                border: 'none',
+                                                color: '#94a3b8',
+                                                cursor: 'pointer',
+                                                padding: '4px',
+                                                display: 'flex',
+                                                alignItems: 'center'
+                                            }}
+                                        >
+                                            <ExternalLink size={14} />
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                            {!isExplanationCollapsed && (
+                                <pre style={{ flex: 1, overflow: 'auto', margin: 0, fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                                    {explanationData ? formatExplainData(explanationData) : '// Explanation results will appear here'}
+                                </pre>
+                            )}
+                        </div>
+
                         {/* Resize Handle for Results/Profiling */}
                         {!isResultsCollapsed && !isProfilingCollapsed && (
                             <div
@@ -807,10 +936,11 @@ export default function Home() {
                             flexDirection: 'column',
                             overflow: 'hidden',
                             transition: isResizingResults ? 'none' : 'flex 0.2s ease',
-                            borderTop: isResultsCollapsed || (!isResultsCollapsed && !isProfilingCollapsed) ? 'none' : '1px solid var(--border)',
-                            paddingTop: isProfilingCollapsed ? '0.5rem' : '0'
+                            borderTop: '1px solid var(--border)',
+                            background: 'var(--surface)',
+                            padding: '1rem'
                         }}>
-                            <div style={{ marginBottom: isProfilingCollapsed ? '0' : '0.5rem', marginTop: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ marginBottom: isProfilingCollapsed ? '0' : '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div
                                     style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}
                                     onClick={() => setIsProfilingCollapsed(!isProfilingCollapsed)}
