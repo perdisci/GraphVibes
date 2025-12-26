@@ -107,22 +107,49 @@ const GraphViz = ({
 
     React.useEffect(() => {
         if (fgRef.current) {
-            // Reset node positions to force a fresh layout
+            // Reset node positions to force a fresh layout always
             if (data && data.nodes) {
-                data.nodes.forEach(node => {
-                    node.fx = null;
-                    node.fy = null;
-                    node.vx = null;
-                    node.vy = null;
-                    // We don't delete x/y to avoid visual glitching if possible, but for DAG switch it helps to let them flow.
-                    // Actually, setting fx/fy to null releases dragged nodes.
-                });
+                // If circular, we fix positions. If NOT circular, we UNfix them.
+                if (dagMode === 'circular') {
+                    const nodes = data.nodes;
+                    const count = nodes.length;
+                    const radius = count * 10 + 100; // Dynamic radius
+                    const angleStep = (2 * Math.PI) / count;
+
+                    nodes.forEach((node, i) => {
+                        const angle = i * angleStep;
+                        node.fx = radius * Math.cos(angle);
+                        node.fy = radius * Math.sin(angle);
+                        // Also set current x/y to minimize animation jump
+                        node.x = node.fx;
+                        node.y = node.fy;
+                        node.vx = 0;
+                        node.vy = 0;
+                    });
+                } else {
+                    // Release nodes for force/DAG layout
+                    data.nodes.forEach(node => {
+                        node.fx = null;
+                        node.fy = null;
+                        node.vx = null;
+                        node.vy = null;
+                    });
+                }
             }
 
-            // When dagMode changes, we need to reheat the simulation for the new forces to take effect
+            // Reheat simulation
             fgRef.current.d3ReheatSimulation();
+
+            // If switching to circular, might want to zoom to fit after a delay
+            if (dagMode === 'circular') {
+                setTimeout(() => {
+                    fgRef.current?.zoomToFit(400);
+                }, 100);
+            }
         }
     }, [dagMode, data]);
+
+    const effectiveDagMode = ['td', 'bu', 'lr', 'rl', 'radialout', 'radialin'].includes(dagMode) ? dagMode : undefined;
 
     const handleZoomIn = () => {
         if (fgRef.current) {
@@ -275,7 +302,7 @@ const GraphViz = ({
                 }}
                 linkWidth={2}
                 linkHoverPrecision={4}
-                dagMode={dagMode}
+                dagMode={effectiveDagMode}
                 dagLevelDistance={50}
             />}
 

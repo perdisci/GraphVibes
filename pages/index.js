@@ -1357,6 +1357,7 @@ export default function Home() {
                                 <option value="rl">Tree (Right-Left)</option>
                                 <option value="radialout">Radial (Outwards)</option>
                                 <option value="radialin">Radial (Inwards)</option>
+                                <option value="circular">Circular</option>
                             </select>
                         </div>
                     </div>
