@@ -288,7 +288,7 @@ const GraphViz = forwardRef(({
                             {Array.from(new Set(data.nodes.map(n => n.label))).map(label => (
                                 <div key={`node-${label}`} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
                                     <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: getNodeColor({ label }) }} />
-                                    <span>{label}</span>
+                                    <span style={{ fontSize: '0.85rem' }}>{label}</span>
                                 </div>
                             ))}
                         </div>
@@ -299,7 +299,7 @@ const GraphViz = forwardRef(({
                             {Array.from(new Set(data.links.map(l => l.label))).map(label => (
                                 <div key={`link-${label}`} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
                                     <div style={{ width: '12px', height: '2px', background: getLinkColor({ label }) }} />
-                                    <span>{label}</span>
+                                    <span style={{ fontSize: '0.85rem' }}>{label}</span>
                                 </div>
                             ))}
                         </div>
