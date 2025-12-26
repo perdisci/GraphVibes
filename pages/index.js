@@ -1,7 +1,7 @@
 import Head from 'next/head';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Play, Activity, Database, Layers, Banana, Copy, ExternalLink, Check, ZoomIn, ZoomOut, Maximize2, Minimize2, Settings, Focus, X, Link, AlertCircle, Loader, Palette } from 'lucide-react';
+import { Play, Activity, Database, Layers, Banana, Copy, ExternalLink, Check, ZoomIn, ZoomOut, Maximize2, Minimize2, Settings, Focus, X, Link, AlertCircle, Loader, Palette, Info } from 'lucide-react';
 import { GRAPH_PALETTES } from '../utils/palettes';
 
 const GraphViz = dynamic(() => import('../components/GraphViz'), {
@@ -23,6 +23,7 @@ export default function Home() {
     const [isResizing, setIsResizing] = useState(false);
     const [isMaximized, setIsMaximized] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
     const [isConnectionModalOpen, setIsConnectionModalOpen] = useState(false);
 
     // Connection Settings
@@ -373,6 +374,14 @@ export default function Home() {
                         style={{ padding: '0.25rem' }}
                     >
                         <Palette size={16} />
+                    </button>
+                    <button
+                        className="control-btn"
+                        onClick={() => setIsAboutModalOpen(true)}
+                        title="About Graph.Vibes"
+                        style={{ padding: '0.25rem' }}
+                    >
+                        <Info size={16} />
                     </button>
                 </div>
             </header>
@@ -750,6 +759,47 @@ export default function Home() {
                                         {config.label}
                                     </button>
                                 ))}
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+
+            {
+                isAboutModalOpen && (
+                    <div className="modal-overlay" onClick={() => setIsAboutModalOpen(false)}>
+                        <div className="modal" onClick={e => e.stopPropagation()} style={{ width: '400px' }}>
+                            <div className="modal-header">
+                                <h3 className="modal-title">About Graph.Vibes</h3>
+                                <button className="control-btn" onClick={() => setIsAboutModalOpen(false)}>
+                                    <X size={20} />
+                                </button>
+                            </div>
+                            <div style={{ padding: '1rem', color: 'var(--text-main)' }}>
+                                <div style={{ marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                                    <img
+                                        src={theme === 'light' ? '/GraphVibes-Logo-Light.png' : '/GraphVibes-Logo-Dark.png'}
+                                        alt="Graph.Vibes"
+                                        style={{ height: '64px', borderRadius: '8px' }}
+                                    />
+                                    <h2 style={{ margin: 0, fontSize: '1.25rem' }}>Graph.Vibes</h2>
+                                    <p style={{ margin: 0, opacity: 0.7, fontSize: '0.9rem' }}>JanusGraph Visualizer</p>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '0.75rem 1.5rem', fontSize: '0.9rem' }}>
+                                    <div style={{ fontWeight: 600, opacity: 0.7 }}>Version</div>
+                                    <div>0.1.0</div>
+                                    <div style={{ fontWeight: 600, opacity: 0.7 }}>Author</div>
+                                    <div>Roberto Perdisci</div>
+                                    <div style={{ fontWeight: 600, opacity: 0.7 }}>AI Coding Agent</div>
+                                    <div>Gemini 3 Pro + Antigravity</div>
+                                    <div style={{ fontWeight: 600, opacity: 0.7 }}>Stack</div>
+                                    <div>Next.js (Node v12.22.9), React Force Graph (v1.25.0), JanusGraph</div>
+                                    <div style={{ fontWeight: 600, opacity: 0.7 }}>License</div>
+                                    <div>MIT</div>
+                                </div>
+                                <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)', textAlign: 'center', fontSize: '0.8rem', opacity: 0.5 }}>
+                                    &copy; 2025 Graph.Vibes Project
+                                </div>
                             </div>
                         </div>
                     </div>
