@@ -8,6 +8,10 @@ const GraphViz = dynamic(() => import('../components/GraphViz'), {
     ssr: false
 });
 
+const Editor = dynamic(() => import('@monaco-editor/react'), {
+    ssr: false
+});
+
 export default function Home() {
     const [query, setQuery] = useState('// Click on Run Query to execute\ng.V().limit(50)');
     const [data, setData] = useState({ nodes: [], links: [] });
@@ -394,11 +398,25 @@ export default function Home() {
                                 <Database size={14} /> GREMLIN QUERY
                             </h3>
                         </div>
-                        <textarea
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            spellCheck={false}
-                        />
+                        <div style={{ height: '120px', border: '1px solid var(--border)', borderRadius: '4px', overflow: 'hidden', marginBottom: '1rem' }}>
+                            <Editor
+                                height="100%"
+                                defaultLanguage="javascript"
+                                value={query}
+                                onChange={(value) => setQuery(value)}
+                                theme={theme === 'light' ? 'light' : 'vs-dark'}
+                                options={{
+                                    minimap: { enabled: false },
+                                    scrollBeyondLastLine: false,
+                                    fontSize: 14,
+                                    lineNumbers: 'off',
+                                    folding: false,
+                                    overviewRulerLanes: 0,
+                                    automaticLayout: true,
+                                    padding: { top: 8, bottom: 8 }
+                                }}
+                            />
+                        </div>
                         <button className="btn" onClick={handleRunQuery} disabled={loading} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
                             {loading ? 'Running...' : <><Play size={16} /> Run Query</>}
                         </button>
@@ -793,7 +811,7 @@ export default function Home() {
                                     <div style={{ fontWeight: 600, opacity: 0.7 }}>AI Coding Agent</div>
                                     <div>Gemini 3 Pro + Antigravity</div>
                                     <div style={{ fontWeight: 600, opacity: 0.7 }}>Stack</div>
-                                    <div>Next.js (Node v12.22.9), React Force Graph (v1.25.0), JanusGraph</div>
+                                    <div>Next.js (Node v20.19.6), React Force Graph (v1.25.4), JanusGraph</div>
                                     <div style={{ fontWeight: 600, opacity: 0.7 }}>License</div>
                                     <div>MIT</div>
                                 </div>

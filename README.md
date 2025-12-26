@@ -22,21 +22,19 @@ It provides a powerful interface to write Gremlin queries, visualize the results
 -   **Node.js**: v14.x or higher (v18+ recommended).
 -   **JanusGraph**: A running instance of JanusGraph Server (default: `localhost:8182`).
 
-## ⚠️ Compatibility & Requirements
-
-> **Note**: This project is currently optimized for **Node.js v12** to maintain stability with legacy dependencies, though version upgrades are planned.
+## ✅ Compatibility & Requirements
 
 ### Environment
--   **Node.js**: v12.22.x (Recommended/Tested)
--   **Yarn/NPM**: Standard versions compatible with Node 12.
+-   **Node.js**: v18.x, v20.x (Tested on v20.19.6)
+-   **Yarn/NPM**: Latest versions.
 
-### Critical Dependencies
-To avoid build failures, specific versions of core libraries are pinned:
--   `react-force-graph-2d`: `1.25.0` (Do not upgrade to 1.29+ without Node upgrade)
+### Dependencies
+Using latest versions of core libraries:
+-   `react-force-graph-2d`: Latest (Unpinned)
 -   `gremlin`: `3.5.6`
--   `lucide-react`: `0.294.0`
+-   `lucide-react`: Latest (Unpinned)
 
-*Feature Limitation*: Syntax checking (Monaco Editor) is currently disabled due to Node 12 incompatibility.
+*Feature Active*: Syntax checking (Monaco Editor) is enabled.
 
 ## 📦 Installation
 
