@@ -1480,7 +1480,7 @@ export default function Home() {
                                 </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '0.75rem 1.5rem', fontSize: '0.9rem' }}>
                                     <div style={{ fontWeight: 600, opacity: 0.7 }}>Version</div>
-                                    <div>0.2.1</div>
+                                    <div>0.2.2</div>
                                     <div style={{ fontWeight: 600, opacity: 0.7 }}>Author</div>
                                     <div>Roberto Perdisci</div>
                                     <div style={{ fontWeight: 600, opacity: 0.7 }}>AI Coding Agent</div>
