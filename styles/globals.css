@@ -356,8 +356,8 @@ pre {
 /* Status (Node/Edge Count) */
 .graph-status {
   position: absolute;
-  top: 1rem;
-  right: 1rem;
+  bottom: 1rem;
+  left: 1rem;
   background: var(--glass-bg);
   padding: 0.5rem 1rem;
   border-radius: 20px;

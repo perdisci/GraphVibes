@@ -16,8 +16,9 @@ const GraphViz = forwardRef(({
     nodePalette,
     edgePalette,
     labelStyle = 'glass',
-    nodeLabelPreferences = {}
-}, ref) => {
+    nodeLabelPreferences = {},
+    forwardedRef
+}) => {
     const fgRef = useRef();
     const containerRef = useRef();
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -97,7 +98,7 @@ const GraphViz = forwardRef(({
         return () => resizeObserver.disconnect();
     }, []);
 
-    useImperativeHandle(ref, () => ({
+    useImperativeHandle(forwardedRef, () => ({
         zoom: (...args) => fgRef.current?.zoom(...args),
         zoomToFit: (...args) => fgRef.current?.zoomToFit(...args),
         centerAt: (...args) => fgRef.current?.centerAt(...args),

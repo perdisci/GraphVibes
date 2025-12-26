@@ -1,7 +1,7 @@
 import Head from 'next/head';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Play, Activity, Database, Layers, Banana, Copy, ExternalLink, Check, ZoomIn, ZoomOut, Maximize2, Minimize2, Settings, Focus, X, Link, AlertCircle, Loader, Palette, Info, ChevronUp, ChevronDown, GripHorizontal, Timer, BookOpen } from 'lucide-react';
+import { Play, Activity, Database, Layers, Banana, Copy, ExternalLink, Check, ZoomIn, ZoomOut, Maximize2, Minimize2, Settings, Focus, X, Link, AlertCircle, Loader, Palette, Info, ChevronUp, ChevronDown, GripHorizontal, Timer, BookOpen, Search } from 'lucide-react';
 import { GRAPH_PALETTES } from '../utils/palettes';
 
 const GraphViz = dynamic(() => import('../components/GraphViz'), {
@@ -167,6 +167,9 @@ export default function Home() {
     const [isProfilingCollapsed, setIsProfilingCollapsed] = useState(true);
     const [isExplanationCollapsed, setIsExplanationCollapsed] = useState(true);
 
+    // Search State
+    const [searchTerm, setSearchTerm] = useState('');
+
     // Connection Settings
     const [connectionSettings, setConnectionSettings] = useState({
         host: 'localhost',
@@ -298,6 +301,49 @@ export default function Home() {
     const handleZoomOut = () => {
         if (graphRef.current) {
             graphRef.current.zoom(graphRef.current.zoom() / 1.2, 400);
+        }
+    };
+
+    const handleGraphSearch = () => {
+        if (!searchTerm.trim()) return;
+
+        console.log("Searching for:", searchTerm);
+        console.log("Graph Ref:", graphRef.current);
+
+        if (graphRef.current) {
+            console.log("Graph Ref Keys:", Object.keys(graphRef.current));
+            // Check prototypes
+            let proto = Object.getPrototypeOf(graphRef.current);
+            console.log("Graph Ref Proto:", proto);
+        }
+
+        const term = searchTerm.toLowerCase();
+        // Find node by id or label (partial match)
+        const foundNode = data.nodes.find(node =>
+            String(node.id).toLowerCase().includes(term) ||
+            (node.label && String(node.label).toLowerCase().includes(term))
+        );
+
+        if (foundNode) {
+            console.log("Found node:", foundNode);
+            // Focus on node
+            if (graphRef.current && typeof graphRef.current.centerAt === 'function') {
+                try {
+                    graphRef.current.centerAt(foundNode.x, foundNode.y, 1000);
+                    if (graphRef.current.zoom) graphRef.current.zoom(8, 2000);
+                } catch (e) {
+                    console.error("Error invoking graph methods:", e);
+                }
+            } else {
+                console.error("centerAt method missing on graphRef", graphRef.current);
+                // Fallback attempt if zoom exists
+                if (graphRef.current && typeof graphRef.current.zoom === 'function') {
+                    graphRef.current.zoom(8, 2000);
+                }
+            }
+            setSelectedElement({ ...foundNode, type: 'node' });
+        } else {
+            console.log("Node not found");
         }
     };
 
@@ -1023,10 +1069,66 @@ export default function Home() {
                     onMouseDown={startResizing}
                 />
 
+                {/* Graph Search Box */}
+
+
                 <div className={`graph-area ${isMaximized ? 'full-screen-graph' : ''}`} style={{ position: 'relative' }}>
+                    {/* Graph Search Box */}
+                    {!isMaximized && (
+                        <div style={{
+                            position: 'absolute',
+                            top: '1rem',
+                            right: '1rem',
+                            zIndex: 5,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            background: 'var(--glass-bg)',
+                            padding: '0.5rem',
+                            borderRadius: '8px',
+                            backdropFilter: 'blur(4px)',
+                            border: '1px solid var(--border)',
+                            boxShadow: '0 4px 6px -1px var(--shadow-color)',
+                            width: '240px'
+                        }}>
+                            <Search size={16} color="var(--text-dim)" />
+                            <input
+                                type="text"
+                                placeholder="Search nodes..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleGraphSearch();
+                                }}
+                                style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    color: 'var(--text-main)',
+                                    fontSize: '0.9rem',
+                                    width: '100%',
+                                    outline: 'none'
+                                }}
+                            />
+                            {searchTerm && (
+                                <button
+                                    onClick={() => setSearchTerm('')}
+                                    style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        padding: 0,
+                                        cursor: 'pointer',
+                                        color: 'var(--text-dim)',
+                                        display: 'flex'
+                                    }}
+                                >
+                                    <X size={14} />
+                                </button>
+                            )}
+                        </div>
+                    )}
                     <div style={{ height: '100%', width: '100%' }}>
                         <GraphViz
-                            ref={graphRef}
+                            forwardedRef={graphRef}
                             data={data}
                             onNodeClick={handleNodeClick}
                             onLinkClick={handleLinkClick}
