@@ -9,7 +9,7 @@ const GraphViz = dynamic(() => import('../components/GraphViz'), {
 });
 
 export default function Home() {
-    const [query, setQuery] = useState('g.V().limit(50)');
+    const [query, setQuery] = useState('// Click on Run Query to execute\ng.V().limit(50)');
     const [data, setData] = useState({ nodes: [], links: [] });
     const [raw, setRaw] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -19,7 +19,7 @@ export default function Home() {
     const [copied, setCopied] = useState(false);
 
     // UI State
-    const [sidebarWidth, setSidebarWidth] = useState(400);
+    const [sidebarWidth, setSidebarWidth] = useState(320);
     const [isResizing, setIsResizing] = useState(false);
     const [isMaximized, setIsMaximized] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
