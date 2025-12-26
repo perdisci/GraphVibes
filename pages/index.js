@@ -145,6 +145,7 @@ export default function Home() {
     const [profilingData, setProfilingData] = useState(null);
     const [explanationData, setExplanationData] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [queryDuration, setQueryDuration] = useState(null);
     const [error, setError] = useState(null);
 
     const [selectedElement, setSelectedElement] = useState(null);
@@ -360,28 +361,37 @@ export default function Home() {
         setSelectedElement(null);
         setProfilingData(null);
         setExplanationData(null);
+        setQueryDuration(null); // Reset duration at start
 
         try {
+            // Strip comments and trailing semicolons/whitespace to append .profile() safely
+            const cleanQuery = query.replace(/\/\/.*$/gm, '').trim().replace(/;+$/, '');
+
             // 1. Run Main Query
+            const startTime = performance.now(); // Start timer
             const res = await fetch('/api/query', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    query,
+                    query: cleanQuery, // Use cleanQuery here
                     host: connectionSettings.host,
                     port: connectionSettings.port
                 }),
             });
-            const result = await res.json();
 
-            if (!res.ok) throw new Error(result.error);
+            if (!res.ok) {
+                const text = await res.text(); // Get raw error text
+                throw new Error(text);
+            }
+
+            const result = await res.json();
+            const endTime = performance.now(); // End timer
+            setQueryDuration(endTime - startTime); // Set duration
 
             setData(result.graph);
             setRaw(result.raw);
 
             // 2. Run Profiling Query
-            // Strip comments and trailing semicolons/whitespace to append .profile() safely
-            const cleanQuery = query.replace(/\/\/.*$/gm, '').trim().replace(/;+$/, '');
             const profilingQuery = `${cleanQuery}.profile()`;
 
             try {
@@ -754,6 +764,11 @@ export default function Home() {
                         <button className="btn" onClick={handleRunQuery} disabled={loading} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
                             {loading ? 'Running...' : <><Play size={16} /> Run Query</>}
                         </button>
+                        {queryDuration !== null && !loading && (
+                            <div style={{ textAlign: 'center', fontSize: '0.75rem', color: '#64748b', marginBottom: '0.5rem' }}>
+                                Last run: {queryDuration.toFixed(2)}ms
+                            </div>
+                        )}
                         {error && (
                             <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '4px', color: '#ef4444', fontSize: '0.85rem' }}>
                                 {error}
