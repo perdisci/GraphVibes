@@ -2,6 +2,7 @@ import Head from 'next/head';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { Play, Activity, Database, Layers, Banana, Copy, ExternalLink, Check, ZoomIn, ZoomOut, Maximize2, Minimize2, Settings, Focus, X, Link, AlertCircle, Loader, Palette } from 'lucide-react';
+import { GRAPH_PALETTES } from '../utils/palettes';
 
 const GraphViz = dynamic(() => import('../components/GraphViz'), {
     ssr: false
@@ -53,7 +54,9 @@ export default function Home() {
         backgroundColor: '#0f111a',
         nodeColor: '', // default auto
         linkColor: '',  // default auto
-        layoutMode: null // null (force), td, bu, lr, rl, radialout, radialin
+        layoutMode: null, // null (force), td, bu, lr, rl, radialout, radialin
+        activeNodePalette: 'default',
+        activeEdgePalette: 'default'
     });
 
     const graphRef = useRef();
@@ -347,6 +350,8 @@ export default function Home() {
                             nodeColor={graphSettings.nodeColor || undefined}
                             linkColor={graphSettings.linkColor || undefined}
                             dagMode={graphSettings.layoutMode}
+                            nodePalette={GRAPH_PALETTES[graphSettings.activeNodePalette]?.colors}
+                            edgePalette={GRAPH_PALETTES[graphSettings.activeEdgePalette]?.colors}
                             onMaximize={toggleMaximize}
                             isMaximized={isMaximized}
                             onSettings={() => setIsSettingsOpen(true)}
@@ -380,7 +385,7 @@ export default function Home() {
                             {selectedElement.label && (
                                 <div style={{ marginBottom: '1.5rem' }}>
                                     <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '0.25rem' }}>LABEL</div>
-                                    <div style={{ display: 'inline-block', padding: '0.25rem 0.5rem', borderRadius: '4px', background: selectedElement.color || '#6366f1', color: '#fff', fontSize: '0.85rem' }}>
+                                    <div style={{ display: 'inline-block', padding: '0.25rem 0.5rem', borderRadius: '4px', background: selectedElement.displayColor || selectedElement.color || '#6366f1', color: '#fff', fontSize: '0.85rem' }}>
                                         {selectedElement.label}
                                     </div>
                                 </div>
@@ -430,28 +435,47 @@ export default function Home() {
                         </div>
 
                         <div className="form-group">
-                            <label className="form-label">Node Color (Hex or Property)</label>
-                            <input
-                                type="text"
+                            <label className="form-label">Node Color Theme</label>
+                            <select
                                 className="form-input"
-                                value={graphSettings.nodeColor}
-                                onChange={e => setGraphSettings({ ...graphSettings, nodeColor: e.target.value })}
-                                placeholder="Auto (leave empty)"
-                            />
-                            <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.25rem' }}>
-                                Leave empty for auto-color by label, or enter a hex code (e.g. #ff0000).
+                                value={graphSettings.activeNodePalette}
+                                onChange={e => setGraphSettings({ ...graphSettings, activeNodePalette: e.target.value })}
+                                style={{ cursor: 'pointer' }}
+                            >
+                                {Object.entries(GRAPH_PALETTES).map(([key, palette]) => (
+                                    <option key={key} value={key}>
+                                        {palette.label}
+                                    </option>
+                                ))}
+                            </select>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginTop: '0.25rem', display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                                {/* Preview dots */}
+                                {GRAPH_PALETTES[graphSettings.activeNodePalette]?.colors.slice(0, 8).map(c => (
+                                    <div key={c} style={{ width: '8px', height: '8px', borderRadius: '50%', background: c }} />
+                                ))}
                             </div>
                         </div>
 
                         <div className="form-group">
-                            <label className="form-label">Link Color</label>
-                            <input
-                                type="text"
+                            <label className="form-label">Edge Color Theme</label>
+                            <select
                                 className="form-input"
-                                value={graphSettings.linkColor}
-                                onChange={e => setGraphSettings({ ...graphSettings, linkColor: e.target.value })}
-                                placeholder="Auto (leave empty)"
-                            />
+                                value={graphSettings.activeEdgePalette}
+                                onChange={e => setGraphSettings({ ...graphSettings, activeEdgePalette: e.target.value })}
+                                style={{ cursor: 'pointer' }}
+                            >
+                                {Object.entries(GRAPH_PALETTES).map(([key, palette]) => (
+                                    <option key={key} value={key}>
+                                        {palette.label}
+                                    </option>
+                                ))}
+                            </select>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginTop: '0.25rem', display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                                {/* Preview dots */}
+                                {GRAPH_PALETTES[graphSettings.activeEdgePalette]?.colors.slice(0, 8).map(c => (
+                                    <div key={c} style={{ width: '8px', height: '8px', borderRadius: '50%', background: c }} />
+                                ))}
+                            </div>
                         </div>
 
                         <div className="form-group">

@@ -12,65 +12,65 @@ const GraphViz = forwardRef(({
     onMaximize,
     isMaximized,
     onSettings,
-    dagMode
+    dagMode,
+    nodePalette,
+    edgePalette
 }, ref) => {
     const fgRef = useRef();
     const containerRef = useRef();
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
     const [isLegendOpen, setIsLegendOpen] = useState(true);
 
-    // Custom Color Palette
-    const COLOR_PALETTE = [
-        '#ef4444', // red-500
-        '#f97316', // orange-500
-        '#f59e0b', // amber-500
-        '#84cc16', // lime-500
-        '#10b981', // emerald-500
-        '#06b6d4', // cyan-500
-        '#3b82f6', // blue-500
-        '#6366f1', // indigo-500
-        '#8b5cf6', // violet-500
-        '#d946ef', // fuchsia-500
-        '#ec4899', // pink-500
-        '#f43f5e', // rose-500
-        '#14b8a6', // teal-500
-        '#a855f7', // purple-500
-        '#22c55e', // green-500
-        '#eab308', // yellow-500
-        '#0ea5e9', // sky-500
-        '#64748b', // slate-500
+    // Custom Color Palette (Internal Default)
+    const DEFAULT_PALETTE = [
+        '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4',
+        '#3b82f6', '#6366f1', '#8b5cf6', '#d946ef', '#ec4899', '#f43f5e',
+        '#14b8a6', '#a855f7', '#22c55e', '#eab308', '#0ea5e9', '#64748b'
     ];
 
-    // Memoize the color mapping to ensure consistency
-    const colorMap = React.useMemo(() => {
-        const map = {};
-        let colorIndex = 0;
+    const activeNodePalette = nodePalette && nodePalette.length > 0 ? nodePalette : DEFAULT_PALETTE;
+    const activeEdgePalette = edgePalette && edgePalette.length > 0 ? edgePalette : DEFAULT_PALETTE;
 
-        const getColor = (label) => {
-            if (!map[label]) {
-                map[label] = COLOR_PALETTE[colorIndex % COLOR_PALETTE.length];
-                colorIndex++;
+    // Memoize the color mappings to ensure consistency
+    const { nodeColorMap, linkColorMap } = React.useMemo(() => {
+        const nMap = {};
+        const lMap = {};
+        let nodeColorIndex = 0;
+        let linkColorIndex = 0;
+
+        const getNodeColorVal = (label) => {
+            if (!nMap[label]) {
+                nMap[label] = activeNodePalette[nodeColorIndex % activeNodePalette.length];
+                nodeColorIndex++;
             }
-            return map[label];
+            return nMap[label];
+        };
+
+        const getLinkColorVal = (label) => {
+            if (!lMap[label]) {
+                lMap[label] = activeEdgePalette[linkColorIndex % activeEdgePalette.length];
+                linkColorIndex++;
+            }
+            return lMap[label];
         };
 
         if (data) {
-            data.nodes.forEach(node => getColor(node.label));
-            data.links.forEach(link => getColor(link.label));
+            data.nodes.forEach(node => getNodeColorVal(node.label));
+            data.links.forEach(link => getLinkColorVal(link.label));
         }
 
-        return map;
-    }, [data]);
+        return { nodeColorMap: nMap, linkColorMap: lMap };
+    }, [data, activeNodePalette, activeEdgePalette]);
 
     // Derived color accessors
     const getNodeColor = (node) => {
         if (nodeColor) return nodeColor; // User override
-        return colorMap[node.label] || '#94a3b8';
+        return nodeColorMap[node.label] || '#94a3b8';
     };
 
     const getLinkColor = (link) => {
         if (linkColor) return linkColor; // User override
-        return colorMap[link.label] || '#475569';
+        return linkColorMap[link.label] || '#475569';
     };
 
     React.useEffect(() => {
@@ -160,8 +160,19 @@ const GraphViz = forwardRef(({
                 backgroundColor={backgroundColor || "#0f111a"}
                 linkColor={getLinkColor}
                 nodeRelSize={6}
-                onNodeClick={onNodeClick}
-                onLinkClick={onLinkClick}
+                nodeRelSize={6}
+                onNodeClick={(node, event) => {
+                    if (onNodeClick) {
+                        const color = getNodeColor(node);
+                        onNodeClick({ ...node, displayColor: color }, event);
+                    }
+                }}
+                onLinkClick={(link, event) => {
+                    if (onLinkClick) {
+                        const color = getLinkColor(link);
+                        onLinkClick({ ...link, displayColor: color }, event);
+                    }
+                }}
                 linkWidth={2}
                 linkHoverPrecision={4}
                 dagMode={dagMode}

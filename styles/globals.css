@@ -282,7 +282,7 @@ pre {
 .modal-title {
   margin: 0;
   font-size: 1.1rem;
-  color: white;
+  color: var(--text-main);
 }
 
 .form-group {
@@ -302,7 +302,7 @@ pre {
   background: var(--background);
   border: 1px solid var(--border);
   border-radius: 4px;
-  color: white;
+  color: var(--text-main);
   font-family: monospace;
 }
 
