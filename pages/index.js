@@ -1,7 +1,7 @@
 import Head from 'next/head';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Play, Activity, Database, Layers, Banana, Copy, ExternalLink, Check, ZoomIn, ZoomOut, Maximize2, Minimize2, Settings, Focus, X, Link, AlertCircle, Loader, Palette, Info, ChevronUp, ChevronDown, GripHorizontal } from 'lucide-react';
+import { Play, Activity, Database, Layers, Banana, Copy, ExternalLink, Check, ZoomIn, ZoomOut, Maximize2, Minimize2, Settings, Focus, X, Link, AlertCircle, Loader, Palette, Info, ChevronUp, ChevronDown, GripHorizontal, Timer } from 'lucide-react';
 import { GRAPH_PALETTES } from '../utils/palettes';
 
 const GraphViz = dynamic(() => import('../components/GraphViz'), {
@@ -12,10 +12,103 @@ const Editor = dynamic(() => import('@monaco-editor/react'), {
     ssr: false
 });
 
+const parseGraphSON = (item) => {
+    if (item === null || item === undefined) return item;
+
+    if (Array.isArray(item)) {
+        return item.map(parseGraphSON);
+    }
+
+    if (typeof item === 'object') {
+        if (item['@value'] !== undefined) {
+            const type = item['@type'];
+            const value = item['@value'];
+
+            if (type === 'g:Map') {
+                const map = {};
+                if (Array.isArray(value)) {
+                    for (let i = 0; i < value.length; i += 2) {
+                        const k = parseGraphSON(value[i]);
+                        const v = parseGraphSON(value[i + 1]);
+                        map[k] = v;
+                    }
+                }
+                return map;
+            }
+            if (type === 'g:List' || type === 'g:Set') {
+                return parseGraphSON(value);
+            }
+            // For other types like g:Int64, g:Double, g:Metrics, etc., just unwrap/recurse
+            return parseGraphSON(value);
+        }
+
+        // Regular object, recurse keys
+        const newObj = {};
+        for (const k in item) {
+            newObj[k] = parseGraphSON(item[k]);
+        }
+        return newObj;
+    }
+
+    return item;
+};
+
+const formatProfileData = (rawData) => {
+    // 1. Parse GraphSON if present
+    const parsed = parseGraphSON(rawData);
+
+    // 2. Extract profile object (usually in an array)
+    let profileObj = parsed;
+    if (Array.isArray(parsed) && parsed.length > 0) {
+        profileObj = parsed[0];
+    }
+
+    if (!profileObj || !profileObj.metrics) return JSON.stringify(parsed, null, 2);
+
+    const metrics = profileObj.metrics;
+    let output = '';
+
+    // Header
+    output += 'Dur: ' + (profileObj.dur ? profileObj.dur.toFixed(4) : 'N/A') + ' ms\n\n';
+
+    // Columns
+    const pad = (str, len, char = ' ') => (str + '').padEnd(len, char);
+    const padL = (str, len, char = ' ') => (str + '').padStart(len, char);
+
+    output += pad('Step', 50) + padL('Count', 12) + padL('Traversers', 12) + padL('Time (ms)', 15) + padL('% Dur', 10) + '\n';
+    output += pad('', 50 + 12 + 12 + 15 + 10, '=') + '\n';
+
+    const printMetric = (metric, indent = 0) => {
+        const name = (metric.name || 'Unknown').substring(0, 48 - indent);
+        const count = metric.counts ? (metric.counts.elementCount || metric.counts.traverserCount || 0) : 0;
+        const traversers = metric.counts ? (metric.counts.traverserCount || 0) : 0;
+        const dur = metric.dur || 0;
+        const perc = metric.percDur || 0;
+        const indentStr = ' '.repeat(indent);
+
+        output += pad(indentStr + name, 50) + padL(count, 12) + padL(traversers, 12) + padL(dur.toFixed(3), 15) + padL(perc.toFixed(2), 10) + '\n';
+
+        if (metric.annotations) {
+            Object.entries(metric.annotations).forEach(([key, val]) => {
+                output += '    ' + indentStr + key + ': ' + val + '\n';
+            });
+        }
+
+        if (metric.metrics && Array.isArray(metric.metrics)) {
+            metric.metrics.forEach(m => printMetric(m, indent + 2));
+        }
+    };
+
+    metrics.forEach(m => printMetric(m));
+
+    return output;
+};
+
 export default function Home() {
     const [query, setQuery] = useState('// Click on Run Query to execute\ng.V().limit(50)');
     const [data, setData] = useState({ nodes: [], links: [] });
     const [raw, setRaw] = useState(null);
+    const [profilingData, setProfilingData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
@@ -34,6 +127,7 @@ export default function Home() {
     const [queryEditorHeight, setQueryEditorHeight] = useState(120);
     const [isResizingQuery, setIsResizingQuery] = useState(false);
     const [isResultsCollapsed, setIsResultsCollapsed] = useState(false);
+    const [isProfilingCollapsed, setIsProfilingCollapsed] = useState(true);
 
     // Connection Settings
     const [connectionSettings, setConnectionSettings] = useState({
@@ -59,6 +153,9 @@ export default function Home() {
         setGraphSettings(prev => ({ ...prev, backgroundColor: THEME_CONFIG[theme].background }));
     }, [theme]);
 
+    const [resultsSplitRatio, setResultsSplitRatio] = useState(0.5);
+    const [isResizingResults, setIsResizingResults] = useState(false);
+
     // Graph Settings
     const [graphSettings, setGraphSettings] = useState({
         backgroundColor: '#ffffff',
@@ -74,37 +171,49 @@ export default function Home() {
     const graphRef = useRef();
     const sidebarRef = useRef();
 
-    // Resize Logic
-    const startResizing = useCallback(() => {
-        setIsResizing(true);
+    // Resize Handlers
+    const startResizing = useCallback(() => setIsResizing(true), []);
+    const startResizingQuery = useCallback((e) => {
+        e.stopPropagation(); // Prevent sidebar resize
+        setIsResizingQuery(true);
     }, []);
+    const startResizingResults = useCallback(() => setIsResizingResults(true), []);
 
     const stopResizing = useCallback(() => {
         setIsResizing(false);
+        setIsResizingQuery(false);
+        setIsResizingResults(false);
     }, []);
 
     const resize = useCallback((mouseMoveEvent) => {
-        if (isResizing) {
-            const newWidth = mouseMoveEvent.clientX;
-            if (newWidth > 200 && newWidth < 800) {
-                setSidebarWidth(newWidth);
+        if (isResizing && sidebarRef.current) {
+            const newWidth = mouseMoveEvent.clientX - sidebarRef.current.getBoundingClientRect().left;
+            if (newWidth > 200 && newWidth < 800) setSidebarWidth(newWidth);
+        }
+        if (isResizingQuery && sidebarRef.current) {
+            const sidebarTop = sidebarRef.current.getBoundingClientRect().top;
+            const newHeight = mouseMoveEvent.clientY - sidebarTop - 40; // Approx header offset
+            if (newHeight > 50 && newHeight < 600) setQueryEditorHeight(newHeight);
+        }
+        if (isResizingResults && sidebarRef.current) {
+            // Calculate ratio within the available result space
+            // This is trickier because flexbox is distributing space.
+            // Simplified approach: Calculate relative position within the container.
+            // But the container starts after Query Editor.
+            // Let's rely on movement delta if possible, or just simpler pointer percent relative to the results section.
+
+            // Allow simplified adjustment:
+            // Just update ratio based on movement? No, ratio is easier if we know top/height.
+            // Let's assume the results container is valid.
+            const resultsContainer = sidebarRef.current.querySelector('.results-container-wrapper');
+            if (resultsContainer) {
+                const rect = resultsContainer.getBoundingClientRect();
+                const relativeY = mouseMoveEvent.clientY - rect.top;
+                const ratio = Math.min(Math.max(relativeY / rect.height, 0.1), 0.9);
+                setResultsSplitRatio(ratio);
             }
         }
-        if (isResizingQuery) {
-            // Calculate new height based on mouse Y relative to sidebar top
-            // This is a bit tricky without ref to top, but let's approximate or use movementY
-            // Be simpler: Just rely on mouse position if we know header height (~60px) + check connection logic
-            // providing a "delta" approach is often safer if we don't have absolute positioning refs easily
-            // Let's use strict offset from sidebarRef
-            if (sidebarRef.current) {
-                const sidebarRect = sidebarRef.current.getBoundingClientRect();
-                const newHeight = mouseMoveEvent.clientY - sidebarRect.top - 40; // 40px for header/margin offset approx
-                if (newHeight > 100 && newHeight < (window.innerHeight - 200)) {
-                    setQueryEditorHeight(newHeight);
-                }
-            }
-        }
-    }, [isResizing, isResizingQuery]);
+    }, [isResizing, isResizingQuery, isResizingResults]);
 
     useEffect(() => {
         window.addEventListener('mousemove', resize);
@@ -115,10 +224,6 @@ export default function Home() {
         };
     }, [resize, stopResizing]);
 
-    const startResizingQuery = useCallback((e) => {
-        e.stopPropagation(); // Prevent sidebar resize
-        setIsResizingQuery(true);
-    }, []);
 
     const stopResizingQuery = useCallback(() => {
         setIsResizingQuery(false);
@@ -217,7 +322,10 @@ export default function Home() {
         setLoading(true);
         setError(null);
         setSelectedElement(null);
+        setProfilingData(null);
+
         try {
+            // 1. Run Main Query
             const res = await fetch('/api/query', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -231,9 +339,35 @@ export default function Home() {
 
             if (!res.ok) throw new Error(result.error);
 
-            // Force graph to re-render or update
             setData(result.graph);
             setRaw(result.raw);
+
+            // 2. Run Profiling Query
+            // Strip comments and trailing semicolons/whitespace to append .profile() safely
+            const cleanQuery = query.replace(/\/\/.*$/gm, '').trim().replace(/;+$/, '');
+            const profilingQuery = `${cleanQuery}.profile()`;
+
+            try {
+                const profileRes = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query: profilingQuery,
+                        host: connectionSettings.host,
+                        port: connectionSettings.port
+                    }),
+                });
+
+                if (profileRes.ok) {
+                    const profileResult = await profileRes.json();
+                    setProfilingData(profileResult.raw);
+                } else {
+                    console.warn("Profiling failed", await profileRes.text());
+                }
+            } catch (profileErr) {
+                console.warn("Profiling execution error", profileErr);
+            }
+
         } catch (err) {
             setError(err.message);
         } finally {
@@ -586,62 +720,153 @@ export default function Home() {
                     )}
 
                     {/* Results Panel Section */}
-                    <div className="results-panel" style={{
-                        flex: isResultsCollapsed ? '0 0 auto' : '1',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        overflow: 'hidden',
-                        transition: 'flex 0.2s ease'
-                    }}>
-                        <div style={{ marginBottom: isResultsCollapsed ? '0' : '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div
-                                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}
-                                onClick={() => setIsResultsCollapsed(!isResultsCollapsed)}
-                            >
-                                <h3 style={{ margin: 0, fontSize: '0.9rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                    <Layers size={14} /> RAW RESULTS
-                                </h3>
-                                {isResultsCollapsed ? <ChevronUp size={14} color="#94a3b8" /> : <ChevronDown size={14} color="#94a3b8" />}
-                            </div>
-
-                            {!isResultsCollapsed && (
-                                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                    <button
-                                        onClick={handleCopy}
-                                        title="Copy raw JSON"
-                                        style={{
-                                            background: 'none',
-                                            border: 'none',
-                                            color: copied ? '#4ade80' : '#94a3b8',
-                                            cursor: 'pointer',
-                                            padding: '4px',
-                                            display: 'flex',
-                                            alignItems: 'center'
-                                        }}
-                                    >
-                                        {copied ? <Check size={14} /> : <Copy size={14} />}
-                                    </button>
-                                    <button
-                                        onClick={handleMaximize}
-                                        title="Open locally in new tab"
-                                        style={{
-                                            background: 'none',
-                                            border: 'none',
-                                            color: '#94a3b8',
-                                            cursor: 'pointer',
-                                            padding: '4px',
-                                            display: 'flex',
-                                            alignItems: 'center'
-                                        }}
-                                    >
-                                        <ExternalLink size={14} />
-                                    </button>
+                    <div className="results-container-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+                        <div className="results-panel" style={{
+                            flex: isResultsCollapsed ? '0 0 auto' : (isProfilingCollapsed ? '1' : resultsSplitRatio),
+                            display: 'flex',
+                            flexDirection: 'column',
+                            overflow: 'hidden',
+                            transition: isResizingResults ? 'none' : 'flex 0.2s ease',
+                            minHeight: isResultsCollapsed ? 'auto' : '100px'
+                        }}>
+                            <div style={{ marginBottom: isResultsCollapsed ? '0' : '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div
+                                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}
+                                    onClick={() => setIsResultsCollapsed(!isResultsCollapsed)}
+                                >
+                                    <h3 style={{ margin: 0, fontSize: '0.9rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <Layers size={14} /> RAW RESULTS
+                                    </h3>
+                                    {isResultsCollapsed ? <ChevronUp size={14} color="#94a3b8" /> : <ChevronDown size={14} color="#94a3b8" />}
                                 </div>
+
+                                {!isResultsCollapsed && (
+                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                        <button
+                                            onClick={handleCopy}
+                                            title="Copy raw JSON"
+                                            style={{
+                                                background: 'none',
+                                                border: 'none',
+                                                color: copied ? '#4ade80' : '#94a3b8',
+                                                cursor: 'pointer',
+                                                padding: '4px',
+                                                display: 'flex',
+                                                alignItems: 'center'
+                                            }}
+                                        >
+                                            {copied ? <Check size={14} /> : <Copy size={14} />}
+                                        </button>
+                                        <button
+                                            onClick={handleMaximize}
+                                            title="Open locally in new tab"
+                                            style={{
+                                                background: 'none',
+                                                border: 'none',
+                                                color: '#94a3b8',
+                                                cursor: 'pointer',
+                                                padding: '4px',
+                                                display: 'flex',
+                                                alignItems: 'center'
+                                            }}
+                                        >
+                                            <ExternalLink size={14} />
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                            {!isResultsCollapsed && (
+                                <pre style={{ flex: 1, overflow: 'auto', margin: 0 }}>{raw ? JSON.stringify(raw, null, 2) : '// Results will appear here'}</pre>
                             )}
                         </div>
-                        {!isResultsCollapsed && (
-                            <pre style={{ flex: 1, overflow: 'auto', margin: 0 }}>{raw ? JSON.stringify(raw, null, 2) : '// Results will appear here'}</pre>
+
+                        {/* Resize Handle for Results/Profiling */}
+                        {!isResultsCollapsed && !isProfilingCollapsed && (
+                            <div
+                                onMouseDown={startResizingResults}
+                                style={{
+                                    height: '8px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: 'row-resize',
+                                    color: 'var(--border)',
+                                    borderTop: '1px solid var(--border)',
+                                    borderBottom: '1px solid var(--border)',
+                                    background: 'var(--bg-secondary)'
+                                }}
+                            >
+                                <GripHorizontal size={12} />
+                            </div>
                         )}
+
+                        {/* Profiling Panel Section */}
+                        <div className="profiling-panel" style={{
+                            flex: isProfilingCollapsed ? '0 0 auto' : (isResultsCollapsed ? '1' : 1 - resultsSplitRatio),
+                            display: 'flex',
+                            flexDirection: 'column',
+                            overflow: 'hidden',
+                            transition: isResizingResults ? 'none' : 'flex 0.2s ease',
+                            borderTop: isResultsCollapsed || (!isResultsCollapsed && !isProfilingCollapsed) ? 'none' : '1px solid var(--border)',
+                            paddingTop: isProfilingCollapsed ? '0.5rem' : '0'
+                        }}>
+                            <div style={{ marginBottom: isProfilingCollapsed ? '0' : '0.5rem', marginTop: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div
+                                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}
+                                    onClick={() => setIsProfilingCollapsed(!isProfilingCollapsed)}
+                                >
+                                    <h3 style={{ margin: 0, fontSize: '0.9rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <Timer size={14} /> QUERY PROFILING
+                                    </h3>
+                                    {isProfilingCollapsed ? <ChevronUp size={14} color="#94a3b8" /> : <ChevronDown size={14} color="#94a3b8" />}
+                                </div>
+
+                                {!isProfilingCollapsed && (
+                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                        <button
+                                            onClick={() => navigator.clipboard.writeText(JSON.stringify(profilingData, null, 2))}
+                                            title="Copy profiling JSON"
+                                            style={{
+                                                background: 'none',
+                                                border: 'none',
+                                                color: '#94a3b8',
+                                                cursor: 'pointer',
+                                                padding: '4px',
+                                                display: 'flex',
+                                                alignItems: 'center'
+                                            }}
+                                        >
+                                            <Copy size={14} />
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                const text = formatProfileData(profilingData);
+                                                const blob = new Blob([text], { type: 'text/plain' });
+                                                const url = URL.createObjectURL(blob);
+                                                window.open(url, '_blank');
+                                            }}
+                                            title="Open locally in new tab"
+                                            style={{
+                                                background: 'none',
+                                                border: 'none',
+                                                color: '#94a3b8',
+                                                cursor: 'pointer',
+                                                padding: '4px',
+                                                display: 'flex',
+                                                alignItems: 'center'
+                                            }}
+                                        >
+                                            <ExternalLink size={14} />
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                            {!isProfilingCollapsed && (
+                                <pre style={{ flex: 1, overflow: 'auto', margin: 0, fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                                    {profilingData ? formatProfileData(profilingData) : '// Profiling results will appear here'}
+                                </pre>
+                            )}
+                        </div>
                     </div>
                 </div>
 
