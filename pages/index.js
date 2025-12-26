@@ -336,6 +336,12 @@ export default function Home() {
     }, []);
 
     const handleEditorDidMount = (editor, monaco) => {
+        // Disable default JS lib suggestions (fixes CacheStorage.has conflict)
+        monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
+            noLib: true,
+            allowNonTsExtensions: true
+        });
+
         // Register Gremlin completion provider
         monaco.languages.registerCompletionItemProvider('javascript', {
             triggerCharacters: ['.'],
