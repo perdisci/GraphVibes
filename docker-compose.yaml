@@ -1,5 +1,5 @@
 services:
-  jgraph-viz:
+  graphvibes:
     build: .
     ports:
       - "3000:3000"

@@ -40,8 +40,8 @@ Using latest versions of core libraries:
 
 1.  Clone the repository:
     ```bash
-    git clone https://github.com/yourusername/jgraph-viz.git
-    cd jgraph-viz
+    git clone https://github.com/yourusername/GraphVibes.git
+    cd GraphVibes
     ```
 
 2.  Install dependencies:
