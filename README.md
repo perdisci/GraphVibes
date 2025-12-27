@@ -1,4 +1,4 @@
-# Graph.Vibes - Gremlin Graph Visualizer
+# <img src="public/GraphVibes-Logo-Light.png" width="40" style="vertical-align: middle; margin-right: 10px;" /> Graph.Vibes - Gremlin Graph Visualizer
 
 **Graph.Vibes** is a modern interactive web-based visualizer for Gremlin-compatible graph databases. It provides a powerful interface for writing Gremlin queries, visualizing the results as a force-directed graph, and exploring your data with advanced interactive features.
 
