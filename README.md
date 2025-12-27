@@ -44,30 +44,79 @@ Using latest versions of core libraries:
     cd GraphVibes
     ```
 
-2.  Install dependencies:
+## 🐳 Running with Docker
+
+1.  **Create the network** (Required for container communication):
+    ```bash
+    docker network create jgnet
+    ```
+
+2.  **Start Graph.Vibes**:
+    ```bash
+    docker-compose up -d
+    ```
+    The application will be available at `http://localhost:3000`.
+
+## 🐉 Quick Start with JanusGraph
+
+To test Graph.Vibes, you can run a local generic JanusGraph instance and load the "Graph of the Gods" example dataset.
+
+1.  **Start JanusGraph (In-Memory)**:
+    Run the following command to start a JanusGraph container on the `jgnet` network:
+    ```bash
+    docker run --rm -d --name janusgraph --network jgnet -p 8182:8182 janusgraph/janusgraph:1.1.0
+    ```
+
+2.  **Load "Graph of the Gods"**:
+    Access the container to load the example graph using the Gremlin Console:
+    ```bash
+    docker exec -it janusgraph ./bin/gremlin.sh
+    ```
+    Inside the console, run:
+    ```groovy
+    :remote connect tinkerpop.server conf/remote.yaml
+    :remote console
+    GraphOfTheGodsFactory.load(graph)
+    ```
+    Type `:exit` to leave the console when done.
+
+3.  **Connect Graph.Vibes**:
+    -   Open Graph.Vibes at `http://localhost:3000`.
+    -   Click the **Connection** icon.
+    -   **Host**: `janusgraph` (Since both the Graph.Vibes and JanusGraph containers are on the `jgnet` Docker network).
+    -   **Port**: `8182`.
+    -   Click **Test Connection** -> **Save & Connect**.
+
+4. **Run a Query**:
+    -   Enter a Gremlin query in the dedicated console at the bottom (e.g., `g.V().limit(50)`).
+    -   Click **Run Query** (or Press `Ctrl/Cmd + Enter`).
+    -   Explore the graph!
+
+
+## 🏃‍♂️ Manual Usage
+
+1.  Install dependencies:
     ```bash
     npm install
     # or
     yarn install
     ```
 
-## 🏃‍♂️ Usage
-
-1.  **Start the development server**:
+2.  **Start the development server**:
     ```bash
     npm run dev
     ```
 
-2.  **Open the application**:
+3.  **Open the application**:
     Navigate to `http://localhost:3000` in your browser.
 
-3.  **Connect to Server**:
+4.  **Connect to Server**:
     -   Click the **Connection** icon (WiFi symbol) in the header.
     -   Enter your Gremlin server details (Default: `localhost` : `8182`).
     -   Click **Test Connection** to verify.
 
-4.  **Visualize Data**:
-    -   Enter a Gremlin query in the dedicated console at the bottom (e.g., `g.V().limit(100)`).
+5.  **Visualize Data**:
+    -   Enter a Gremlin query in the dedicated console at the bottom (e.g., `g.V().limit(10)`).
     -   Click **Run Query** (or Press `Ctrl/Cmd + Enter`).
     -   Explore the graph!
 
@@ -90,7 +139,7 @@ Global settings can be accessed via the **Settings** icon (Tools symbol) in the 
 -   **Background Color**: Override theme defaults.
 -   **Theme**: Switch between Light, Dark, and Midnight.
 -   **Palettes**: Choose distinct color schemes for Nodes and Edges.
--   **Expansion Limit**: Set the max number of neighbors to fetch on double-click.
+-   **Expansion Limit**: Set the max number of neighbors to fetch on node double-click.
 
 ## 🤝 Contributing
 
