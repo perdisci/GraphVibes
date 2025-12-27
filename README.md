@@ -129,22 +129,29 @@ To test Graph.Vibes, you can run a local generic JanusGraph instance and load th
 
 ## 🎮 Interaction Guide
 
--   **Select Node/Edge**: Single-click an element to view its details in the right-hand panel.
+-   **Search Nodes**: Use the **Search Box** (top-right) to find nodes by ID or label. Press `Enter` to auto-center and zoom on the result.
+-   **Select Node/Edge**: Single-click an element to view its details in the right-hand panel. Use the **Copy Icon** next to properties to copy values.
 -   **Expand Neighborhood**: **Double-click** a node to fetch and display its connected neighbors.
     -   *Config*: You can adjust the "Expansion Limit" in the Settings.
--   **Set Node Labels**:
+-   **Set Displayed Node Labels**:
     1.  Click a node to open details.
     2.  **Click on any property name** (e.g., `name`, `age`, `city`) in the list.
     3.  All nodes of that type will update to use that property as their label.
     4.  Click again to revert to showing the Node ID.
 -   **Pan/Zoom**: Click and drag background to pan; Scroll to zoom.
 -   **Fit View**: Click the **Locate** icon (Target symbol) to center the graph.
+-   **Query Profiling**: Toggle the **Query Profiling** panel (bottom-left) to view execution strategies and performance stats for your Gremlin queries.
 
 ## ⚙️ Configuration
 
 Global settings can be accessed via the **Settings** icon (Tools symbol) in the header:
 -   **Background Color**: Override theme defaults.
 -   **Theme**: Switch between Light, Dark, and Midnight.
+-   **Graph Layout**: Choose how nodes are arranged:
+    -   *Force Directed*: Standard physics simulation (Default).
+    -   *Circular*: Arranges all nodes in a minimal overlap circle.
+    -   *Community*: Clusters nodes by **Label** in a radial grouping pattern.
+    -   *Tree / Radial*: Hierarchical layouts (DAG Mode) for directed graphs.
 -   **Palettes**: Choose distinct color schemes for Nodes and Edges.
 -   **Expansion Limit**: Set the max number of neighbors to fetch on node double-click.
 
