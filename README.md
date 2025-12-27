@@ -3,7 +3,7 @@
 **Graph.Vibes** is a modern interactive web-based visualizer for Gremlin-compatible graph databases. It provides a powerful interface for writing Gremlin queries, visualizing the results as a force-directed graph, and exploring your data with advanced interactive features.
 
 **Development** --
-Graph.Vibes is built entirely with [Antigravity](https://antigravity.dev) and [Gemini 3 Pro](https://gemini.ai/). This project was motivated by a personal interest in learning how to "vibe code" a fairly complex web application using modern development workflows that rely on AI coding agents. While the development process required sustantial time spent testing and debugging the application and providing feedback to the AI agent to get it to write code that was free of errors, no manual code changes were made to the codebase. Only some minor manual documentation changes were added to the [README.md](README.md) file.
+Graph.Vibes was built entirely with [Antigravity](https://antigravity.dev) and [Gemini 3 Pro](https://gemini.ai/). This project was motivated by a personal interest in learning how to "vibe code" a fairly complex web application using modern development workflows that rely on AI coding agents. While the development process required sustantial time spent testing and debugging the application and providing feedback to the AI agent to get it to write code that was free of errors, no manual code changes were made to the codebase. Only some minor manual documentation changes were added to the [README.md](README.md) file.
 
 **Main Frameworks and Tools** --
 Graph.Vibes is built using the following main frameworks and tools:
