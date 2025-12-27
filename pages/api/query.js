@@ -108,7 +108,7 @@ export default async function handler(req, res) {
 
                     // Helper to quote string IDs if necessary (Gremlin IDs can be numbers or strings)
                     // Assumption: simple IDs. For complex IDs, this simplistic joining might fail.
-                    // But for standard JanusGraph (Long or UUID), string representation usually works or needs specific handling.
+                    // But for standard Gremlin Server (Long or UUID), string representation usually works or needs specific handling.
                     // A safer way is using bindings, but for this quick feature:
 
                     const idList = nodeIds.map(id => {

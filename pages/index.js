@@ -705,7 +705,7 @@ export default function Home() {
     return (
         <div className="layout">
             <Head>
-                <title>Graph.Vibes — JanusGraph Visualizer</title>
+                <title>Graph.Vibes</title>
                 <meta name="description" content="Modern GraphVibes Visualizer" />
             </Head>
 
@@ -716,7 +716,7 @@ export default function Home() {
                         alt="GraphVibes"
                         style={{ height: '54px', borderRadius: '8px' }}
                     />
-                    Graph.Vibes — JanusGraph Visualizer
+                    Graph.Vibes
                 </div>
                 <div style={{ display: 'flex', gap: '1rem', marginLeft: 'auto', alignItems: 'center' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginRight: '0.5rem' }}>
@@ -1378,7 +1378,7 @@ export default function Home() {
                             </div>
 
                             <div className="form-group">
-                                <label className="form-label">JanusGraph Server Host</label>
+                                <label className="form-label">Gremlin Server Host</label>
                                 <input
                                     type="text"
                                     className="form-input"
@@ -1476,7 +1476,7 @@ export default function Home() {
                                         style={{ height: '64px', borderRadius: '8px' }}
                                     />
                                     <h2 style={{ margin: 0, fontSize: '1.25rem' }}>Graph.Vibes</h2>
-                                    <p style={{ margin: 0, opacity: 0.7, fontSize: '0.9rem' }}>JanusGraph Visualizer</p>
+                                    <p style={{ margin: 0, opacity: 0.7, fontSize: '0.9rem' }}>Graph Visualizer</p>
                                 </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '0.75rem 1.5rem', fontSize: '0.9rem' }}>
                                     <div style={{ fontWeight: 600, opacity: 0.7 }}>Version</div>

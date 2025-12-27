@@ -1,6 +1,6 @@
-# Graph.Vibes - JanusGraph Visualizer
+# Graph.Vibes - Gremlin Graph Visualizer
 
-**Graph.Vibes** is a modern, interactive web-based visualizer for [JanusGraph](https://janusgraph.org/), built with [Next.js](https://nextjs.org/) and [react-force-graph](https://github.com/vasturiano/react-force-graph).
+**Graph.Vibes** is a modern, interactive web-based visualizer for Gremlin-compatible graph databases, built with [Next.js](https://nextjs.org/) and [react-force-graph](https://github.com/vasturiano/react-force-graph).
 
 It provides a powerful interface to write Gremlin queries, visualize the results as a force-directed graph, and explore your data with advanced interactive features.
 
@@ -20,7 +20,7 @@ It provides a powerful interface to write Gremlin queries, visualize the results
 ## 🛠️ Prerequisites
 
 -   **Node.js**: v14.x or higher (v18+ recommended).
--   **JanusGraph**: A running instance of JanusGraph Server (default: `localhost:8182`).
+-   **Gremlin Server**: A running instance of a Gremlin Server (e.g., JanusGraph, TinkerPop) (default: `localhost:8182`).
 
 ## ✅ Compatibility & Requirements
 
@@ -61,9 +61,9 @@ Using latest versions of core libraries:
 2.  **Open the application**:
     Navigate to `http://localhost:3000` in your browser.
 
-3.  **Connect to JanusGraph**:
+3.  **Connect to Server**:
     -   Click the **Connection** icon (WiFi symbol) in the header.
-    -   Enter your JanusGraph server details (Default: `localhost` : `8182`).
+    -   Enter your Gremlin server details (Default: `localhost` : `8182`).
     -   Click **Test Connection** to verify.
 
 4.  **Visualize Data**:
