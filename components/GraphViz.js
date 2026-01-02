@@ -1,6 +1,7 @@
 import React, { useRef, useImperativeHandle, useState } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
-import { ZoomIn, ZoomOut, Focus, Maximize2, Minimize2, Settings, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
+import { ZoomIn, ZoomOut, Focus, Maximize2, Minimize2, Settings, RotateCcw, ChevronDown, ChevronUp, Download } from 'lucide-react';
+import { jsPDF } from "jspdf";
 
 const GraphViz = ({
     data,
@@ -210,6 +211,62 @@ const GraphViz = ({
         }
     };
 
+    const handleDownloadPdf = () => {
+        if (!containerRef.current) return;
+
+        // Find the canvas element
+        const canvas = containerRef.current.querySelector('canvas');
+        if (!canvas) return;
+
+        // Create a temporary canvas to draw the background color
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = canvas.width;
+        tempCanvas.height = canvas.height;
+        const ctx = tempCanvas.getContext('2d');
+
+        // Fill with background color
+        ctx.fillStyle = backgroundColor || "#0f111a";
+        ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+        // Draw original canvas over it
+        ctx.drawImage(canvas, 0, 0);
+
+        // Convert to image
+        const imgData = tempCanvas.toDataURL('image/png');
+
+        // Calculate dimensions for PDF (Landscape A4)
+        // A4 size in mm: 297 x 210
+        const pdf = new jsPDF({
+            orientation: 'landscape',
+            unit: 'mm',
+            format: 'a4'
+        });
+
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+
+        // Calculate aspect ratio to fit image within the page
+        const imgProps = pdf.getImageProperties(imgData);
+        const imgRatio = imgProps.width / imgProps.height;
+        const pageRatio = pageWidth / pageHeight;
+
+        let finalWidth = pageWidth;
+        let finalHeight = pageHeight;
+
+        if (imgRatio > pageRatio) {
+            finalHeight = pageWidth / imgRatio;
+        } else {
+            finalWidth = pageHeight * imgRatio;
+        }
+
+        // Center the image
+        const x = (pageWidth - finalWidth) / 2;
+        const y = (pageHeight - finalHeight) / 2;
+
+        pdf.addImage(imgData, 'PNG', x, y, finalWidth, finalHeight);
+        pdf.save('graph.pdf');
+    };
+
     return (
         <div ref={containerRef} style={{ height: '100%', width: '100%', position: 'relative' }}>
             {data && dimensions.width > 0 && <ForceGraph2D
@@ -391,6 +448,7 @@ const GraphViz = ({
                 <button className="control-btn" onClick={handleZoomFit} title="Fit to Screen"><Focus size={18} /></button>
                 <button className="control-btn" onClick={handleZoomReset} title="Reset View"><RotateCcw size={18} /></button>
                 <div style={{ height: '1px', background: 'var(--border)', margin: '4px 0' }} />
+                <button className="control-btn" onClick={handleDownloadPdf} title="Download as PDF"><Download size={18} /></button>
                 <button className="control-btn" onClick={onMaximize} title={isMaximized ? "Minimize" : "Maximize"}>
                     {isMaximized ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
                 </button>
