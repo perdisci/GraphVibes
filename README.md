@@ -52,7 +52,7 @@ Using latest versions of core libraries:
 
 1.  Clone the repository:
     ```bash
-    git clone https://github.com/yourusername/GraphVibes.git
+    git clone https://github.com/perdisci/GraphVibes.git
     cd GraphVibes
     ```
 
