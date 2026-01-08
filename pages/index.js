@@ -515,20 +515,24 @@ export default function Home() {
 
             // Merge Data
             setData(prevData => {
-                const nodeMap = new Map(prevData.nodes.map(n => [n.id, n]));
-                const linkMap = new Map(prevData.links.map(l => [l.id, l]));
+                const getSafeId = (id) => typeof id === 'object' ? JSON.stringify(id) : id;
+
+                const nodeMap = new Map(prevData.nodes.map(n => [getSafeId(n.id), n]));
+                const linkMap = new Map(prevData.links.map(l => [getSafeId(l.id), l]));
 
                 // Add new nodes
                 result.graph.nodes.forEach(n => {
-                    if (!nodeMap.has(n.id)) {
-                        nodeMap.set(n.id, n);
+                    const key = getSafeId(n.id);
+                    if (!nodeMap.has(key)) {
+                        nodeMap.set(key, n);
                     }
                 });
 
                 // Add new links
                 result.graph.links.forEach(l => {
-                    if (!linkMap.has(l.id)) {
-                        linkMap.set(l.id, l);
+                    const key = getSafeId(l.id);
+                    if (!linkMap.has(key)) {
+                        linkMap.set(key, l);
                     }
                 });
 
