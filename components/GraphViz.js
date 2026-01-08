@@ -184,6 +184,50 @@ const GraphViz = ({
         }
     }, [dagMode, data]);
 
+    // Calculate curvature for parallel edges to avoid overlap
+    React.useEffect(() => {
+        if (!data || !data.links) return;
+
+        const linkMap = {};
+
+        // Group links by their source-target pair (order independent)
+        data.links.forEach(link => {
+            const srcId = link.source && typeof link.source === 'object' ? link.source.id : link.source;
+            const tgtId = link.target && typeof link.target === 'object' ? link.target.id : link.target;
+
+            const sortedIds = [srcId, tgtId].sort();
+            // Use something safe for key
+            const key = `${sortedIds[0]}-${sortedIds[1]}`;
+
+            if (!linkMap[key]) linkMap[key] = [];
+            linkMap[key].push(link);
+        });
+
+        // Assign curvature
+        Object.values(linkMap).forEach(group => {
+            const count = group.length;
+            if (count > 1) {
+                // Determine curvature for each edge in the group
+                const spacing = 0.2; // Curvature step
+                group.forEach((link, i) => {
+                    link.curvature = (i - (count - 1) / 2) * spacing;
+                });
+            } else {
+                // Single edge
+                const link = group[0];
+                const srcId = link.source && typeof link.source === 'object' ? link.source.id : link.source;
+                const tgtId = link.target && typeof link.target === 'object' ? link.target.id : link.target;
+
+                // Apply curvature to self-loops so they don't disappear inside the node or look weird
+                if (srcId === tgtId) {
+                    link.curvature = 0.3;
+                } else {
+                    link.curvature = 0; // Straight line
+                }
+            }
+        });
+    }, [data]);
+
     const effectiveDagMode = ['td', 'bu', 'lr', 'rl', 'radialout', 'radialin'].includes(dagMode) ? dagMode : undefined;
 
     const handleZoomIn = () => {
@@ -280,6 +324,7 @@ const GraphViz = ({
                 linkDirectionalArrowRelPos={1}
                 backgroundColor={backgroundColor || "#0f111a"}
                 linkColor={getLinkColor}
+                linkCurvature="curvature"
                 nodeRelSize={6}
                 nodeCanvasObject={(node, ctx, globalScale) => {
                     const label = node.label;
