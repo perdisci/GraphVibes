@@ -185,18 +185,30 @@ const GraphViz = ({
     }, [dagMode, data]);
 
     // Calculate curvature for parallel edges to avoid overlap
-    React.useEffect(() => {
+    // useMemo ensures this runs before render to prevent visual "pop" or missing curves
+    React.useMemo(() => {
         if (!data || !data.links) return;
 
         const linkMap = {};
 
+        // Helper to safely extract string ID
+        const getSafeId = (item) => {
+            if (item === null || item === undefined) return "";
+            if (typeof item === 'object') {
+                // If D3 already linked it, it might be a node object, so try .id
+                if (item.id !== undefined) return getSafeId(item.id);
+                // Otherwise it's likely a composite ID object
+                return JSON.stringify(item);
+            }
+            return String(item);
+        };
+
         // Group links by their source-target pair (order independent)
         data.links.forEach(link => {
-            const srcId = link.source && typeof link.source === 'object' ? link.source.id : link.source;
-            const tgtId = link.target && typeof link.target === 'object' ? link.target.id : link.target;
+            const srcId = getSafeId(link.source);
+            const tgtId = getSafeId(link.target);
 
             const sortedIds = [srcId, tgtId].sort();
-            // Use something safe for key
             const key = `${sortedIds[0]}-${sortedIds[1]}`;
 
             if (!linkMap[key]) linkMap[key] = [];
@@ -210,15 +222,25 @@ const GraphViz = ({
                 // Determine curvature for each edge in the group
                 const spacing = 0.2; // Curvature step
                 group.forEach((link, i) => {
-                    link.curvature = (i - (count - 1) / 2) * spacing;
+                    // Center the curves: -0.1, 0.1 for 2 edges
+                    const rawCurvature = (i - (count - 1) / 2) * spacing;
+
+                    const srcId = getSafeId(link.source);
+                    const tgtId = getSafeId(link.target);
+
+                    // Canonical direction: smaller ID is source
+                    // This ensures consistent "lanes" regardless of individual edge direction
+                    const isCanonical = srcId < tgtId;
+
+                    link.curvature = isCanonical ? rawCurvature : -rawCurvature;
                 });
             } else {
                 // Single edge
                 const link = group[0];
-                const srcId = link.source && typeof link.source === 'object' ? link.source.id : link.source;
-                const tgtId = link.target && typeof link.target === 'object' ? link.target.id : link.target;
+                const srcId = getSafeId(link.source);
+                const tgtId = getSafeId(link.target);
 
-                // Apply curvature to self-loops so they don't disappear inside the node or look weird
+                // Low curvature for self-loops
                 if (srcId === tgtId) {
                     link.curvature = 0.3;
                 } else {
