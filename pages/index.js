@@ -160,6 +160,10 @@ export default function Home() {
     const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
     const [isConnectionModalOpen, setIsConnectionModalOpen] = useState(false);
 
+    // Warning Modal State
+    const [isWarningModalOpen, setIsWarningModalOpen] = useState(false);
+    const [warningMessage, setWarningMessage] = useState(null);
+
     // Sidebar UI State
     const [queryEditorHeight, setQueryEditorHeight] = useState(120);
     const [isResizingQuery, setIsResizingQuery] = useState(false);
@@ -402,6 +406,43 @@ export default function Home() {
         setIsConnectionModalOpen(false);
     };
 
+    // Helper to validate graph data and prevent d3 crashes
+    const validateAndCleanGraph = useCallback((nodes, links) => {
+        const nodeIds = new Set(nodes.map(n => typeof n.id === 'object' ? JSON.stringify(n.id) : String(n.id)));
+        const missingNodes = new Set();
+        const validLinks = [];
+        const seenLinkIds = new Set(); // Track seen link IDs for deduplication
+        const getSafeId = (id) => typeof id === 'object' ? JSON.stringify(id) : String(id);
+
+        links.forEach(link => {
+            const src = getSafeId(link.source);
+            const tgt = getSafeId(link.target);
+            const linkId = getSafeId(link.id);
+
+            // Deduplication Check
+            if (seenLinkIds.has(linkId)) {
+                return; // Skip duplicate link
+            }
+            seenLinkIds.add(linkId);
+
+            if (!nodeIds.has(src)) {
+                missingNodes.add(src);
+            } else if (!nodeIds.has(tgt)) {
+                missingNodes.add(tgt);
+            } else {
+                validLinks.push(link);
+            }
+        });
+
+        if (missingNodes.size > 0) {
+            const msg = `Found ${missingNodes.size} missing nodes referenced by edges. These edges have been hidden to prevent errors.\n\nMissing Node IDs:\n${Array.from(missingNodes).slice(0, 10).join('\n')}${missingNodes.size > 10 ? '\n...and more' : ''}`;
+            setWarningMessage(msg);
+            setIsWarningModalOpen(true);
+        }
+
+        return { nodes, links: validLinks };
+    }, []);
+
     const handleRunQuery = async () => {
         setLoading(true);
         setError(null);
@@ -435,7 +476,10 @@ export default function Home() {
             const endTime = performance.now(); // End timer
             setQueryDuration(endTime - startTime); // Set duration
 
-            setData(result.graph);
+            // Validate Initial Data
+            const cleaned = validateAndCleanGraph(result.graph.nodes, result.graph.links);
+            setData(cleaned);
+
             setRaw(result.raw);
 
             // 2. Run Profiling Query
@@ -528,6 +572,7 @@ export default function Home() {
                     }
                 });
 
+
                 // Add new links
                 result.graph.links.forEach(l => {
                     const key = getSafeId(l.id);
@@ -536,9 +581,42 @@ export default function Home() {
                     }
                 });
 
+                const mergedNodes = Array.from(nodeMap.values());
+                const mergedLinks = Array.from(linkMap.values());
+
+                // Validate Merged Data
+                // Use validateAndCleanGraph logic but inside setter to avoid stale closure issues
+                // Actually validateAndCleanGraph doesn't depend on state, but we need to call it.
+                // Re-implement simplified check here or call the function if it's stable.
+                // Since we are inside setState callback, calling outside function is fine if it doesn't use state.
+
+                const nodeIds = new Set(mergedNodes.map(n => getSafeId(n.id)));
+                const validLinks = [];
+                const missingNodes = new Set();
+
+                mergedLinks.forEach(link => {
+                    // Handle if link.source is already an object (d3 processed) or raw ID
+                    const src = typeof link.source === 'object' ? getSafeId(link.source.id) : getSafeId(link.source);
+                    const tgt = typeof link.target === 'object' ? getSafeId(link.target.id) : getSafeId(link.target);
+
+                    if (!nodeIds.has(src)) missingNodes.add(src);
+                    else if (!nodeIds.has(tgt)) missingNodes.add(tgt);
+                    else validLinks.push(link);
+                });
+
+                if (missingNodes.size > 0) {
+                    // We can't trigger side effect (modal) directly in setState reliably, 
+                    // but we can schedule it.
+                    setTimeout(() => {
+                        const msg = `Found ${missingNodes.size} missing nodes referenced by edges. These edges have been hidden to prevent errors.\n\nMissing: ${Array.from(missingNodes).slice(0, 5).join(', ')}...`;
+                        setWarningMessage(msg);
+                        setIsWarningModalOpen(true);
+                    }, 0);
+                }
+
                 return {
-                    nodes: Array.from(nodeMap.values()),
-                    links: Array.from(linkMap.values())
+                    nodes: mergedNodes,
+                    links: validLinks
                 };
             });
 
@@ -1522,6 +1600,45 @@ export default function Home() {
                                 </div>
                                 <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)', textAlign: 'center', fontSize: '0.8rem', opacity: 0.5 }}>
                                     &copy; 2025 Graph.Vibes Project
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+            {
+                isWarningModalOpen && (
+                    <div className="modal-overlay" onClick={() => setIsWarningModalOpen(false)}>
+                        <div className="modal" onClick={e => e.stopPropagation()} style={{ width: '450px', borderLeft: '4px solid #f59e0b' }}>
+                            <div className="modal-header">
+                                <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#f59e0b' }}>
+                                    <AlertCircle size={20} /> Data Integrity Warning
+                                </h3>
+                                <button className="control-btn" onClick={() => setIsWarningModalOpen(false)}>
+                                    <X size={20} />
+                                </button>
+                            </div>
+                            <div style={{ padding: '1rem', color: 'var(--text-main)', whiteSpace: 'pre-wrap' }}>
+                                <p style={{ marginTop: 0 }}>Some edges could not be visualized because they reference nodes that do not exist in the current result set.</p>
+                                <div style={{
+                                    background: 'var(--bg-secondary)',
+                                    padding: '0.75rem',
+                                    borderRadius: '6px',
+                                    fontFamily: 'monospace',
+                                    fontSize: '0.85rem',
+                                    maxHeight: '150px',
+                                    overflowY: 'auto'
+                                }}>
+                                    {warningMessage}
+                                </div>
+                                <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
+                                    <button
+                                        className="btn"
+                                        onClick={() => setIsWarningModalOpen(false)}
+                                        style={{ background: 'var(--bg-secondary)', color: 'var(--text-main)', border: '1px solid var(--border)' }}
+                                    >
+                                        Dismiss
+                                    </button>
                                 </div>
                             </div>
                         </div>
