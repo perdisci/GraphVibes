@@ -1130,6 +1130,28 @@ export default function Home() {
                             )}
                         </div>
                     )}
+
+                    {/* Loading Overlay */}
+                    {loading && (
+                        <div style={{
+                            position: 'absolute',
+                            inset: 0,
+                            backgroundColor: theme === 'light' ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)',
+                            backdropFilter: 'blur(0px)',
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            zIndex: 50,
+                            pointerEvents: 'all',
+                            borderRadius: 'inherit'
+                        }}>
+                            <div className="spinner-dots">
+                                <div></div><div></div><div></div><div></div>
+                                <div></div><div></div><div></div><div></div>
+                                <div></div><div></div><div></div><div></div>
+                            </div>
+                        </div>
+                    )}
                     <div style={{ height: '100%', width: '100%' }}>
                         <GraphViz
                             forwardedRef={graphRef}
