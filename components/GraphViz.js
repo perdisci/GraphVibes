@@ -277,31 +277,225 @@ const GraphViz = ({
         }
     };
 
+    // Reusable Node Painting Logic
+    const paintNode = (node, ctx, globalScale) => {
+        const label = node.label;
+        const fontSize = 12 / globalScale;
+        const color = getNodeColor(node);
+
+        // Draw node circle
+        const radius = 6;
+
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
+        ctx.fillStyle = color;
+        ctx.fill();
+
+        // Determine text to show
+        let text = node.id;
+        const prefKey = nodeLabelPreferences[node.label];
+
+        let keyToUse = null;
+        if (prefKey !== undefined) {
+            if (prefKey !== null) keyToUse = prefKey;
+        } else {
+            keyToUse = 'name';
+        }
+
+        if (keyToUse && node.properties && node.properties[keyToUse]) {
+            const propVal = node.properties[keyToUse];
+            if (Array.isArray(propVal) && propVal.length > 0 && propVal[0].value) {
+                text = propVal[0].value;
+            } else if (typeof propVal === 'string' || typeof propVal === 'number') {
+                text = propVal;
+            } else if (propVal.value) {
+                text = propVal.value;
+            }
+        }
+
+        if (typeof text === 'object') text = JSON.stringify(text);
+
+        // Text setup
+        ctx.font = `${fontSize}px Sans-Serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // Draw Label based on style
+        if (labelStyle === 'paper' || labelStyle === 'glass') {
+            const textWidth = ctx.measureText(text).width;
+            const bckgDimensions = [textWidth, fontSize].map(n => n + fontSize * 0.4);
+
+            ctx.fillStyle = labelStyle === 'paper' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.6)';
+
+            const x = node.x - bckgDimensions[0] / 2;
+            const y = node.y - bckgDimensions[1] / 2;
+            const w = bckgDimensions[0];
+            const h = bckgDimensions[1];
+            const r = 2;
+
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.arcTo(x + w, y, x + w, y + h, r);
+            ctx.arcTo(x + w, y + h, x, y + h, r);
+            ctx.arcTo(x, y + h, x, y, r);
+            ctx.arcTo(x, y, x + w, y, r);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = labelStyle === 'paper' ? '#000' : '#fff';
+            ctx.fillText(text, node.x, node.y);
+        } else if (labelStyle === 'inverted') {
+            ctx.lineWidth = 3 / globalScale;
+            ctx.strokeStyle = '#ffffff';
+            ctx.strokeText(text, node.x, node.y);
+
+            ctx.fillStyle = '#000000';
+            ctx.fillText(text, node.x, node.y);
+        } else {
+            ctx.lineWidth = 3 / globalScale;
+            ctx.strokeStyle = '#000000a0';
+            ctx.strokeText(text, node.x, node.y);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(text, node.x, node.y);
+        }
+    };
+
+    // Link Painting Logic for PDF to match Screen Default
+    const pdfPaintLink = (link, ctx, globalScale) => {
+        const NODE_R = 6;
+        const ARROW_LEN = 3.5;
+        const ARROW_WIDTH_RATIO = 0.3; // Matches force-graph default narrower arrow
+
+        const src = typeof link.source === 'object' ? link.source : data.nodes.find(n => n.id === link.source);
+        const tgt = typeof link.target === 'object' ? link.target : data.nodes.find(n => n.id === link.target);
+
+        if (!src || !tgt) return;
+
+        const color = getLinkColor(link);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1 / globalScale; // Keep lines 1px equivalent
+
+        const x1 = src.x, y1 = src.y;
+        const x2 = tgt.x, y2 = tgt.y;
+
+        // Calculate Line Path
+        let startX = x1, startY = y1;
+        let endX = x2, endY = y2;
+        let cpx = null, cpy = null; // Control point for curve
+
+        ctx.beginPath();
+
+        if (src.id === tgt.id) {
+            // Self Loop
+            // Heuristic loop layout matching typical d3 force layout visual
+            const loopScale = 40;
+            const cp1x = x1 - loopScale / 2;
+            const cp1y = y1 - loopScale;
+            const cp2x = x1 + loopScale / 2;
+            const cp2y = y1 - loopScale;
+
+            ctx.moveTo(x1, y1);
+            ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x2, y2);
+            ctx.stroke();
+
+            // End vector for arrow calculation (derivative at t=1)
+            // Cubic Bezier Derivative at t=1 is proportional to P3 - P2
+            // P3=(x2,y2), P2=(cp2x,cp2y)
+            startX = cp2x;
+            startY = cp2y;
+        } else if (link.curvature) {
+            // Curved Edge
+            const mx = (x1 + x2) / 2;
+            const my = (y1 + y2) / 2;
+            const dx = x2 - x1;
+            const dy = y2 - y1;
+
+            cpx = mx + (-dy * link.curvature * 0.5);
+            cpy = my + (dx * link.curvature * 0.5);
+
+            ctx.moveTo(x1, y1);
+            ctx.quadraticCurveTo(cpx, cpy, x2, y2);
+            ctx.stroke();
+
+            // End vector for arrow (Control Point -> End)
+            startX = cpx;
+            startY = cpy;
+        } else {
+            // Straight Line
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+
+            // End vector is simply Start -> End
+            // Initialized by default
+        }
+
+        // --- Arrow Drawing ---
+        // Calculate angle at the target
+        const angle = Math.atan2(endY - startY, endX - startX);
+
+        // Offset tip by node radius so it's visible
+        const tipX = endX - Math.cos(angle) * NODE_R;
+        const tipY = endY - Math.sin(angle) * NODE_R;
+
+        ctx.save();
+        ctx.translate(tipX, tipY);
+        ctx.rotate(angle);
+        ctx.fillStyle = color;
+
+        ctx.beginPath();
+        ctx.moveTo(0, 0); // Tip
+        ctx.lineTo(-ARROW_LEN, ARROW_LEN * ARROW_WIDTH_RATIO);
+        ctx.lineTo(-ARROW_LEN, -ARROW_LEN * ARROW_WIDTH_RATIO);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    };
+
     const handleDownloadPdf = () => {
-        if (!containerRef.current) return;
+        if (!data || !dimensions.width || !fgRef.current) return;
 
-        // Find the canvas element
-        const canvas = containerRef.current.querySelector('canvas');
-        if (!canvas) return;
+        // 1. Setup Canvas (2x scale as requested)
+        const scaleFactor = 2; // "Increase the size by only 200%"
+        const w = dimensions.width;
+        const h = dimensions.height;
 
-        // Create a temporary canvas to draw the background color
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = canvas.width;
-        tempCanvas.height = canvas.height;
-        const ctx = tempCanvas.getContext('2d');
+        const canvas = document.createElement('canvas');
+        canvas.width = w * scaleFactor;
+        canvas.height = h * scaleFactor;
+        const ctx = canvas.getContext('2d');
 
-        // Fill with background color
-        ctx.fillStyle = backgroundColor || "#0f111a";
-        ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+        // 2. Background: Forced Light Theme (White)
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Draw original canvas over it
-        ctx.drawImage(canvas, 0, 0);
+        // 3. Setup Camera Transform
+        const { x: cx, y: cy } = fgRef.current.centerAt();
+        const zoom = fgRef.current.zoom();
 
-        // Convert to image
-        const imgData = tempCanvas.toDataURL('image/png');
+        ctx.save();
+        ctx.scale(scaleFactor, scaleFactor);
+        ctx.translate(w / 2, h / 2);
+        ctx.scale(zoom, zoom);
+        ctx.translate(-cx, -cy);
 
-        // Calculate dimensions for PDF (Landscape A4)
-        // A4 size in mm: 297 x 210
+        // 4. Draw Links (Mimicking Default Style)
+        data.links.forEach(link => {
+            pdfPaintLink(link, ctx, zoom);
+        });
+
+        // 5. Draw Nodes
+        data.nodes.forEach(node => {
+            paintNode(node, ctx, zoom);
+        });
+
+        ctx.restore();
+
+        // Convert to Image
+        const imgData = canvas.toDataURL('image/png');
+
+        // Create PDF
         const pdf = new jsPDF({
             orientation: 'landscape',
             unit: 'mm',
@@ -311,7 +505,6 @@ const GraphViz = ({
         const pageWidth = pdf.internal.pageSize.getWidth();
         const pageHeight = pdf.internal.pageSize.getHeight();
 
-        // Calculate aspect ratio to fit image within the page
         const imgProps = pdf.getImageProperties(imgData);
         const imgRatio = imgProps.width / imgProps.height;
         const pageRatio = pageWidth / pageHeight;
@@ -325,16 +518,63 @@ const GraphViz = ({
             finalWidth = pageHeight * imgRatio;
         }
 
-        // Center the image
         const x = (pageWidth - finalWidth) / 2;
         const y = (pageHeight - finalHeight) / 2;
 
         pdf.addImage(imgData, 'PNG', x, y, finalWidth, finalHeight);
+
+        // --- Draw Legend Overlay ---
+        const legendX = 10;
+        let legendY = 10;
+
+        // Forced Black Text for White Background
+        pdf.setTextColor(0, 0, 0);
+
+        pdf.setFontSize(10);
+        pdf.text("LEGEND", legendX, legendY);
+        legendY += 5;
+
+        pdf.setFontSize(8);
+
+        // Node Types
+        const distinctNodes = Array.from(new Set(data.nodes.map(n => n.label)));
+        if (distinctNodes.length > 0) {
+            pdf.text("Nodes", legendX, legendY);
+            legendY += 4;
+
+            distinctNodes.forEach(lbl => {
+                const color = getNodeColor({ label: lbl });
+                pdf.setFillColor(color);
+                pdf.circle(legendX + 2, legendY - 1, 1.5, 'F');
+                pdf.setTextColor(0, 0, 0);
+                pdf.text(String(lbl), legendX + 6, legendY);
+                legendY += 4;
+            });
+            legendY += 2;
+        }
+
+        // Edge Types
+        const distinctEdges = Array.from(new Set(data.links.map(l => l.label)));
+        if (distinctEdges.length > 0) {
+            pdf.text("Edges", legendX, legendY);
+            legendY += 4;
+
+            distinctEdges.forEach(lbl => {
+                const color = getLinkColor({ label: lbl });
+                pdf.setDrawColor(color);
+                pdf.setLineWidth(0.5);
+                pdf.line(legendX, legendY - 1, legendX + 4, legendY - 1);
+                pdf.setTextColor(0, 0, 0);
+                pdf.text(String(lbl), legendX + 6, legendY);
+                legendY += 4;
+            });
+        }
+
         pdf.save('graph.pdf');
     };
 
     return (
-        <div ref={containerRef} style={{ height: '100%', width: '100%', position: 'relative' }}>
+        <div ref={containerRef} style={{ height: '100%', width: '100%', position: 'relative', backgroundColor: backgroundColor || "#0f111a" }}>
             {data && dimensions.width > 0 && <ForceGraph2D
                 ref={fgRef}
                 width={dimensions.width}
@@ -344,103 +584,12 @@ const GraphViz = ({
                 nodeColor={getNodeColor}
                 linkDirectionalArrowLength={3.5}
                 linkDirectionalArrowRelPos={1}
-                backgroundColor={backgroundColor || "#0f111a"}
+                backgroundColor={"rgba(0,0,0,0)"}
                 linkColor={getLinkColor}
                 linkCurvature="curvature"
                 nodeRelSize={6}
-                nodeCanvasObject={(node, ctx, globalScale) => {
-                    const label = node.label;
-                    const fontSize = 12 / globalScale;
-                    const color = getNodeColor(node);
-
-                    // Draw node circle
-                    const radius = 6;
-
-                    ctx.beginPath();
-                    ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
-                    ctx.fillStyle = color;
-                    ctx.fill();
-
-                    // Determine text to show
-                    let text = node.id;
-                    const prefKey = nodeLabelPreferences[node.label];
-
-                    // Logic:
-                    // 1. If explicit pref (prefKey is string), try to use it.
-                    // 2. If explicit disabled (prefKey is null), use ID (already set).
-                    // 3. If no pref (undefined), try 'name'.
-
-                    let keyToUse = null;
-                    if (prefKey !== undefined) {
-                        if (prefKey !== null) keyToUse = prefKey;
-                    } else {
-                        keyToUse = 'name';
-                    }
-
-                    if (keyToUse && node.properties && node.properties[keyToUse]) {
-                        const propVal = node.properties[keyToUse];
-                        if (Array.isArray(propVal) && propVal.length > 0 && propVal[0].value) {
-                            text = propVal[0].value;
-                        } else if (typeof propVal === 'string' || typeof propVal === 'number') {
-                            text = propVal;
-                        } else if (propVal.value) {
-                            text = propVal.value;
-                        }
-                    }
-
-                    if (typeof text === 'object') text = JSON.stringify(text);
-
-                    // Text setup
-                    ctx.font = `${fontSize}px Sans-Serif`;
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-
-                    // Draw Label based on style
-                    if (labelStyle === 'paper' || labelStyle === 'glass') {
-                        // Boxed styles
-                        const textWidth = ctx.measureText(text).width;
-                        const bckgDimensions = [textWidth, fontSize].map(n => n + fontSize * 0.4); // Padding
-
-                        ctx.fillStyle = labelStyle === 'paper' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.6)';
-
-                        // Round rect
-                        const x = node.x - bckgDimensions[0] / 2;
-                        const y = node.y - bckgDimensions[1] / 2;
-                        const w = bckgDimensions[0];
-                        const h = bckgDimensions[1];
-                        const r = 2;
-
-                        ctx.beginPath();
-                        ctx.moveTo(x + r, y);
-                        ctx.arcTo(x + w, y, x + w, y + h, r);
-                        ctx.arcTo(x + w, y + h, x, y + h, r);
-                        ctx.arcTo(x, y + h, x, y, r);
-                        ctx.arcTo(x, y, x + w, y, r);
-                        ctx.closePath();
-                        ctx.fill();
-
-                        ctx.fillStyle = labelStyle === 'paper' ? '#000' : '#fff';
-                        ctx.fillText(text, node.x, node.y);
-                    } else if (labelStyle === 'inverted') {
-                        // Inverted: Black text, White stroke
-                        ctx.lineWidth = 3 / globalScale;
-                        ctx.strokeStyle = '#ffffff';
-                        ctx.strokeText(text, node.x, node.y);
-
-                        ctx.fillStyle = '#000000';
-                        ctx.fillText(text, node.x, node.y);
-                    } else {
-                        // Standard: White text, Black stroke
-                        ctx.lineWidth = 3 / globalScale;
-                        ctx.strokeStyle = '#000000a0';
-                        ctx.strokeText(text, node.x, node.y);
-
-                        ctx.fillStyle = '#ffffff';
-                        ctx.fillText(text, node.x, node.y);
-                    }
-                }}
+                nodeCanvasObject={paintNode}
                 nodePointerAreaPaint={(node, color, ctx) => {
-                    // Define hit area for interaction
                     ctx.fillStyle = color;
                     ctx.beginPath();
                     ctx.arc(node.x, node.y, 6, 0, 2 * Math.PI, false);
