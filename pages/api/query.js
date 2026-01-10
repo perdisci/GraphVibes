@@ -213,9 +213,101 @@ export default async function handler(req, res) {
         // If nodes/links are empty (e.g. valueMap, or just IDs), we might need to handle differently
         // But for the Visualizer, we expect nodes/edges.
 
+        // If nodes/links are empty (e.g. valueMap, or just IDs), we might need to handle differently
+        // But for the Visualizer, we expect nodes/edges.
+
+        // --- AUTO-CONNECT NODES FEATURE ---
+        const { type, autoConnect } = req.body; // 'janus' or 'puppy'
+
+        if (autoConnect && nodes.size > 0) {
+            try {
+                const nodeIds = Array.from(nodes.values()).map(n => n.id);
+
+                // Batch IDs
+                const BATCH_SIZE = 200;
+                // Loop if needed, but for simplicity let's take a reasonable chunk or all if small
+                // Safely assume we want to connect what we see. If 1000 nodes, simple query g.V(ids).bothE() might be heavy but manageable.
+                // Limit to avoiding massive explosions
+                if (nodeIds.length < 1000) {
+                    const idList = nodeIds.map(id => {
+                        if (typeof id === 'number') return id;
+                        return JSON.stringify(id);
+                    }).join(',');
+
+                    // Query: Find all edges connected to these nodes.
+                    // We use robust project for max compatibility.
+                    const connectQuery = `g.V(${idList}).bothE().project('id', 'label', 'inV', 'outV', 'keys', 'vals').by(__.id()).by(__.label()).by(__.inV().id()).by(__.outV().id()).by(__.properties().key().fold()).by(__.properties().value().fold())`;
+
+                    const clientConnect = new gremlin.driver.Client(wsUrl, {
+                        traversalSource: 'g',
+                        mimeType: 'application/vnd.gremlin-v3.0+json'
+                    });
+                    await clientConnect.open();
+                    console.log(`[Gremlin] Auto-Connect Query: ${connectQuery}`);
+                    const connectRes = await clientConnect.submit(connectQuery);
+                    await clientConnect.close();
+
+                    let edgeItems = [];
+                    if (connectRes && typeof connectRes.toArray === 'function') edgeItems = connectRes.toArray();
+                    else if (connectRes && connectRes._items) edgeItems = connectRes._items;
+
+                    const safeNodeKeys = new Set(Array.from(nodes.keys())); // Using getSafeKey keys
+
+                    edgeItems.forEach(item => {
+                        let id, label, inV, outV, keysArr, valsArr;
+                        if (item instanceof Map) {
+                            id = item.get('id');
+                            label = item.get('label');
+                            inV = item.get('inV');
+                            outV = item.get('outV');
+                            keysArr = item.get('keys');
+                            valsArr = item.get('vals');
+                        } else {
+                            id = item.id;
+                            label = item.label;
+                            inV = item.inV;
+                            outV = item.outV;
+                            keysArr = item.keys;
+                            valsArr = item.vals;
+                        }
+
+                        // Filter: Induced Subgraph (Both ends must be in our node set)
+                        // We need to check if inV and outV match any existing node
+                        const safeIn = getSafeKey(getId({ id: inV }));
+                        const safeOut = getSafeKey(getId({ id: outV }));
+
+                        if (safeNodeKeys.has(safeIn) && safeNodeKeys.has(safeOut)) {
+                            // Add to links map
+                            const safeId = getId({ id });
+                            const safeKey = getSafeKey(safeId);
+
+                            if (!links.has(safeKey)) {
+                                // Construct props
+                                let props = {};
+                                const kList = Array.isArray(keysArr) ? keysArr : (keysArr ? Array.from(keysArr) : []);
+                                const vList = Array.isArray(valsArr) ? valsArr : (valsArr ? Array.from(valsArr) : []);
+                                if (kList.length > 0) {
+                                    kList.forEach((k, i) => { if (i < vList.length) props[String(k)] = vList[i]; });
+                                }
+
+                                links.set(safeKey, {
+                                    id: safeId,
+                                    label: label,
+                                    source: getId({ id: outV }),
+                                    target: getId({ id: inV }),
+                                    properties: props
+                                });
+                            }
+                        }
+                    });
+                }
+            } catch (err) {
+                console.warn("Auto-Connect failed", err);
+            }
+        }
+
         // FETCH MISSING PROPERTIES FOR PUPPY GRAPH
         // Check if DB type is puppy and nodes/edges lack props
-        const { type } = req.body; // 'janus' or 'puppy'
 
         if (type === 'puppy') {
             // 1. Enrich Nodes

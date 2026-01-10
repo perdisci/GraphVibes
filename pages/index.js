@@ -180,6 +180,7 @@ export default function Home() {
         port: '8182',
         type: 'janus' // 'janus' or 'puppy'
     });
+    const [autoConnect, setAutoConnect] = useState(false);
     const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'connected', 'connecting', 'disconnected'
 
     // Theme Settings
@@ -465,7 +466,8 @@ export default function Home() {
                     query: cleanQuery, // Use cleanQuery here
                     host: connectionSettings.host,
                     port: connectionSettings.port,
-                    type: connectionSettings.type
+                    type: connectionSettings.type,
+                    autoConnect: autoConnect // Pass the flag
                 }),
             });
 
@@ -551,7 +553,8 @@ export default function Home() {
                     query,
                     host: connectionSettings.host,
                     port: connectionSettings.port,
-                    type: connectionSettings.type
+                    type: connectionSettings.type,
+                    autoConnect: autoConnect
                 })
             });
 
@@ -922,6 +925,17 @@ export default function Home() {
                             <h3 style={{ margin: 0, fontSize: '0.9rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                 <Database size={14} /> GREMLIN QUERY
                             </h3>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <label style={{ fontSize: '0.8rem', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '0.25rem', cursor: 'pointer' }} title="Automatically find edges between displayed nodes">
+                                    <input
+                                        type="checkbox"
+                                        checked={autoConnect}
+                                        onChange={(e) => setAutoConnect(e.target.checked)}
+                                        style={{ cursor: 'pointer' }}
+                                    />
+                                    Auto-Connect Nodes
+                                </label>
+                            </div>
                         </div>
                         <div style={{
                             height: isResultsCollapsed ? '100%' : `${queryEditorHeight}px`,
