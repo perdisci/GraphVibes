@@ -1,7 +1,7 @@
 import Head from 'next/head';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Play, Activity, Database, Layers, Banana, Copy, ExternalLink, Check, ZoomIn, ZoomOut, Maximize2, Minimize2, Settings, Focus, X, Link, AlertCircle, Loader, Palette, Info, ChevronUp, ChevronDown, GripHorizontal, Timer, BookOpen, Search } from 'lucide-react';
+import { Play, Activity, Database, Layers, Banana, Copy, ExternalLink, Check, ZoomIn, ZoomOut, Maximize2, Minimize2, Settings, Focus, X, Link, AlertCircle, Loader, Palette, Info, ChevronUp, ChevronDown, GripHorizontal, Timer, BookOpen, Search, Trash2 } from 'lucide-react';
 import { GRAPH_PALETTES } from '../utils/palettes';
 
 const GraphViz = dynamic(() => import('../components/GraphViz'), {
@@ -831,15 +831,32 @@ export default function Home() {
         });
     };
 
+    const handleClearLogs = () => {
+        setExecutionLog([]);
+        setRaw(null);
+    };
+
     const handleMaximize = () => {
-        if (!raw) return;
-        const text = JSON.stringify(raw, null, 2);
+        let text = '';
+        if (executionLog && executionLog.length > 0) {
+            text = executionLog.map((log, i) => {
+                return `[${i + 1}] ${log.type}\nQUERY:\n${log.query}\nRESULTS:\n${JSON.stringify(log.result, null, 2)}`;
+            }).join('\n\n=============================================================================================================\n\n');
+        } else if (raw) {
+            text = JSON.stringify(raw, null, 2);
+        } else {
+            return;
+        }
+
         const newWindow = window.open();
         if (newWindow) {
-            newWindow.document.write(`<pre style="margin: 0;">${text}</pre>`);
+            newWindow.document.write(`<pre style="font-family: monospace; white-space: pre-wrap; font-size: 12px; padding: 20px;">${text}</pre>`);
+            newWindow.document.title = "Raw Results Log";
             newWindow.document.close();
         }
     };
+
+
 
     // Node Label Preferences
     const [nodeLabelPreferences, setNodeLabelPreferences] = useState({});
@@ -1038,6 +1055,21 @@ export default function Home() {
                                             />
                                             Background Queries
                                         </label>
+                                        <button
+                                            onClick={handleClearLogs}
+                                            title="Clear logs"
+                                            style={{
+                                                background: 'none',
+                                                border: 'none',
+                                                color: '#ef4444',
+                                                cursor: 'pointer',
+                                                padding: '4px',
+                                                display: 'flex',
+                                                alignItems: 'center'
+                                            }}
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
                                         <button
                                             onClick={handleCopy}
                                             title="Copy raw JSON"
