@@ -177,7 +177,8 @@ export default function Home() {
     // Connection Settings
     const [connectionSettings, setConnectionSettings] = useState({
         host: 'localhost',
-        port: '8182'
+        port: '8182',
+        type: 'janus' // 'janus' or 'puppy'
     });
     const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'connected', 'connecting', 'disconnected'
 
@@ -379,7 +380,7 @@ export default function Home() {
             const res = await fetch('/api/test-connection', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ host, port }),
+                body: JSON.stringify({ host, port, type: connectionSettings.type }),
             });
             if (res.ok) {
                 setConnectionStatus('connected');
@@ -463,7 +464,8 @@ export default function Home() {
                 body: JSON.stringify({
                     query: cleanQuery, // Use cleanQuery here
                     host: connectionSettings.host,
-                    port: connectionSettings.port
+                    port: connectionSettings.port,
+                    type: connectionSettings.type
                 }),
             });
 
@@ -492,7 +494,8 @@ export default function Home() {
                     body: JSON.stringify({
                         query: profilingQuery,
                         host: connectionSettings.host,
-                        port: connectionSettings.port
+                        port: connectionSettings.port,
+                        type: connectionSettings.type
                     }),
                 });
 
@@ -515,7 +518,8 @@ export default function Home() {
                     body: JSON.stringify({
                         query: explanationQuery,
                         host: connectionSettings.host,
-                        port: connectionSettings.port
+                        port: connectionSettings.port,
+                        type: connectionSettings.type
                     }),
                 });
 
@@ -546,7 +550,8 @@ export default function Home() {
                 body: JSON.stringify({
                     query,
                     host: connectionSettings.host,
-                    port: connectionSettings.port
+                    port: connectionSettings.port,
+                    type: connectionSettings.type
                 })
             });
 
@@ -664,9 +669,64 @@ export default function Home() {
         }
     }, [expandNode]);
 
-    const handleLinkClick = useCallback((link) => {
+    const handleLinkClick = useCallback(async (link) => {
+        // Optimistic selection
         setSelectedElement({ ...link, type: 'edge' });
-    }, []);
+
+        // Check if properties are missing (and we are in Puppy Mode potentially, or just general lazy load)
+        // If properties are empty, try to fetch them.
+        if ((!link.properties || Object.keys(link.properties).length === 0) && connectionSettings.type === 'puppy') {
+            try {
+                // Show loading indicator on the detail panel ideally, but for now just fetch
+                // We need sourceId and edgeId
+                const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+
+                const res = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        mode: 'edgeProps',
+                        sourceId: sourceId,
+                        edgeId: link.id,
+                        host: connectionSettings.host,
+                        port: connectionSettings.port,
+                        type: connectionSettings.type
+                    })
+                });
+
+                if (res.ok) {
+                    const result = await res.json();
+                    if (result.properties && Object.keys(result.properties).length > 0) {
+                        // Update local state
+                        setData(prev => {
+                            const getSafeId = (id) => typeof id === 'object' ? JSON.stringify(id) : id;
+                            const linkKey = getSafeId(link.id);
+
+                            // Clone links
+                            const newLinks = prev.links.map(l => {
+                                if (getSafeId(l.id) === linkKey) {
+                                    return { ...l, properties: { ...l.properties, ...result.properties } };
+                                }
+                                return l;
+                            });
+
+                            return { ...prev, links: newLinks };
+                        });
+
+                        // Update selected element
+                        setSelectedElement(prev => {
+                            if (prev && prev.id === link.id) {
+                                return { ...prev, properties: { ...prev.properties, ...result.properties } };
+                            }
+                            return prev;
+                        });
+                    }
+                }
+            } catch (e) {
+                console.warn("Failed to fetch on-demand edge properties", e);
+            }
+        }
+    }, [connectionSettings]);
 
     const handleEditorDidMount = (editor, monaco) => {
         // Disable default JS lib suggestions (fixes CacheStorage.has conflict)
@@ -1501,6 +1561,19 @@ export default function Home() {
                                     onChange={e => setConnectionSettings({ ...connectionSettings, port: e.target.value })}
                                     placeholder="8182"
                                 />
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">Database Type</label>
+                                <select
+                                    className="form-input"
+                                    value={connectionSettings.type || 'janus'}
+                                    onChange={e => setConnectionSettings({ ...connectionSettings, type: e.target.value })}
+                                    style={{ cursor: 'pointer' }}
+                                >
+                                    <option value="janus">JanusGraph (Default)</option>
+                                    <option value="puppy">Puppy Graph</option>
+                                </select>
                             </div>
 
                             <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end' }}>

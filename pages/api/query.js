@@ -27,12 +27,112 @@ export default async function handler(req, res) {
         // We'll create a new client just for script submission to allow raw string queries.
         // This is different from the 'g' traversal source.
         const gremlin = require('gremlin');
+        try {
+            const { mode } = req.body;
+
+            if (mode === 'edgeProps') {
+                const { sourceId, edgeId } = req.body;
+                // Robust Fetch Strategy for Single Edge
+                // Use fuzzy match approach + split list projection
+
+                // 1. Resolve sourceId safely 
+                // Only treat as raw GraphSON/JSON if it looks like an object.
+                // Otherwise use JSON.stringify to handle both numbers and strings correctly ("123" vs 123)
+                const sId = (typeof sourceId === 'string' && sourceId.trim().startsWith('{'))
+                    ? sourceId
+                    : JSON.stringify(sourceId);
+
+                // 2. Query
+                // Use bothE() to handle potential direction confusion or incoming edges where sourceId is actually target
+                const propQuery = `g.V(${sId}).bothE().project('id', 'keys', 'vals').by(__.id()).by(__.properties().key().fold()).by(__.properties().value().fold())`;
+
+                console.log(`[EdgeProps] Fetching for source=${sId} edge=${edgeId}`);
+                console.log(`[EdgeProps] Query: ${propQuery}`);
+
+                const clientProp = new gremlin.driver.Client(wsUrl, {
+                    traversalSource: 'g',
+                    mimeType: 'application/vnd.gremlin-v3.0+json'
+                });
+                await clientProp.open();
+                const propRes = await clientProp.submit(propQuery);
+                await clientProp.close();
+
+                let items = [];
+                if (propRes && typeof propRes.toArray === 'function') items = propRes.toArray();
+                else if (propRes && propRes._items) items = propRes._items;
+
+                let foundProps = {};
+
+                // Helper for deterministic key matching
+                const getSafeKey = (id) => {
+                    if (id && typeof id === 'object') {
+                        const keys = Object.keys(id).sort();
+                        if (keys.length === 0 && typeof id.toString === 'function') {
+                            const s = id.toString();
+                            if (s !== '[object Object]') return s;
+                        }
+                        const sorted = {};
+                        keys.forEach(k => sorted[k] = id[k]);
+                        return JSON.stringify(sorted);
+                    }
+                    return id;
+                };
+
+                const targetKey = getSafeKey(edgeId);
+                const targetStr = String(edgeId);
+
+                // Find match
+                for (const item of items) {
+                    let id;
+                    let keysArr = [];
+                    let valsArr = [];
+
+                    if (item instanceof Map) {
+                        id = item.get('id');
+                        keysArr = item.get('keys');
+                        valsArr = item.get('vals');
+                    } else {
+                        id = item.id;
+                        keysArr = item.keys;
+                        valsArr = item.vals;
+                    }
+
+                    // Check Match
+                    let isMatch = false;
+                    // Robust comparison:
+                    // 1. SafeKey (deterministically sorted JSON for objects)
+                    // 2. String coercion (handles 123 vs "123")
+                    if (getSafeKey(id) === targetKey) isMatch = true;
+                    else if (String(id) === targetStr) isMatch = true;
+                    // 3. Last resort: JSON stringify match (e.g. if one safeKey differed slightly but structure is same)
+                    else if (JSON.stringify(id) === JSON.stringify(edgeId)) isMatch = true;
+
+                    if (isMatch) {
+                        // Zip
+                        const kList = Array.isArray(keysArr) ? keysArr : (keysArr ? Array.from(keysArr) : []);
+                        const vList = Array.isArray(valsArr) ? valsArr : (valsArr ? Array.from(valsArr) : []);
+                        kList.forEach((k, i) => { if (i < vList.length) foundProps[String(k)] = vList[i]; });
+                        break;
+                    }
+                }
+
+                res.status(200).json({ properties: foundProps });
+                return;
+            }
+        } catch (err) {
+            console.error(err);
+            if (req.body.mode === 'edgeProps') {
+                return res.status(500).json({ error: 'Failed' });
+            }
+        }
+
         const client = new gremlin.driver.Client(wsUrl, {
             traversalSource: 'g',
             mimeType: 'application/vnd.gremlin-v3.0+json'
         });
 
         await client.open();
+        console.log(`[Gremlin] Main Query: ${query}`);
         const result = await client.submit(query);
         await client.close();
 
@@ -40,14 +140,6 @@ export default async function handler(req, res) {
         const nodes = new Map();
         const links = new Map();
 
-        // Traverse results to find graph elements
-        // The result from client.submit is often an array or ResultSet
-        // ._items is internal, usually use iteration
-
-        // Use .toArray() which is the standard public API (in 3.5+ it returns the array directly or a promise depending on driver version, 
-        // typically synchronous if data is already fetched).
-        // Since we await submit(), we should have data. 
-        // Note: in some versions toArray() is async, so we verify.
         let items = [];
         if (result && typeof result.toArray === 'function') {
             items = result.toArray();
@@ -61,103 +153,292 @@ export default async function handler(req, res) {
             return obj;
         };
 
+        // Helper for consistent Map keys - robust & deterministic
+        const getSafeKey = (id) => {
+            if (id && typeof id === 'object') {
+                // Sort keys to ensure deterministic string
+                const keys = Object.keys(id).sort();
+                if (keys.length === 0 && typeof id.toString === 'function') {
+                    // Handle Longs or custom classes with no enumerable props but valid toString
+                    const s = id.toString();
+                    if (s !== '[object Object]') return s;
+                }
+                const sorted = {};
+                keys.forEach(k => sorted[k] = id[k]);
+                return JSON.stringify(sorted);
+            }
+            return id;
+        };
+
         // Process initial results
         // Process initial results
         items.forEach(item => {
             if (item && item.id && item.label && item.inV && item.outV) {
-                // It's an edge (Check this FIRST because edges often lack inVLabel too, so they would match the vertex check)
-                const sId = getId(item.outV);
-                const tId = getId(item.inV);
-
-                links.set(item.id, {
-                    id: item.id,
-                    source: sId,
-                    target: tId,
+                // It's an edge
+                const edge = formatResult(item);
+                const safeId = getId(item);
+                links.set(getSafeKey(safeId), {
+                    id: safeId,
+                    label: item.label,
+                    source: getId(item.outV), // Use ID ref for D3 (will rely on nodes being present)
+                    target: getId(item.inV),
+                    properties: item.properties || {}
+                });
+            } else if (item && item.id && item.label) {
+                // It's a node
+                const node = formatResult(item);
+                const safeId = getId(item);
+                nodes.set(getSafeKey(safeId), {
+                    id: safeId,
                     label: item.label,
                     properties: item.properties || {}
                 });
-
-                // For direct edges in result, ensure nodes exist placeholders
-                if (!nodes.has(sId)) nodes.set(sId, { id: sId, label: 'Unknown' });
-                if (!nodes.has(tId)) nodes.set(tId, { id: tId, label: 'Unknown' });
-
-            } else if (item && item.id && item.label) {
-                // It's a vertex (Matches if it matches schema and wasn't caught as an edge)
-                // Note: We removed !inVLabel check because it's simpler to just else-if after edge check
-                nodes.set(item.id, {
-                    id: item.id,
-                    label: item.label,
-                    properties: item.properties || {}
+            } else if (item && item.path && item.path.objects) {
+                // Handle path results
+                item.path.objects.forEach(obj => {
+                    if (obj.id && obj.label) {
+                        // Check if edge (has inV/outV - though path objects usually don't have full edge info unless elementMap used)
+                        // For now treat as node if simple
+                        const safeId = getId(obj);
+                        nodes.set(getSafeKey(safeId), {
+                            id: safeId,
+                            label: obj.label,
+                            properties: obj.properties || {}
+                        });
+                    }
                 });
             }
         });
 
-        // Feature: Automatically fetch edges between the found nodes (Induced Subgraph)
-        // Only if we have nodes but no edges (or fewer edges than expected, but "between nodes" usually implies we want them all)
-        // To be safe and give the user what they asked "plot the edges between nodes", we run this check.
-        if (nodes.size > 0) {
-            const nodeIds = Array.from(nodes.keys());
+        // If nodes/links are empty (e.g. valueMap, or just IDs), we might need to handle differently
+        // But for the Visualizer, we expect nodes/edges.
 
-            // We only run this if we have a reasonable number of nodes to avoid massive queries
-            // Standard viz limits usually apply, e.g. < 500
-            if (nodeIds.length < 500) {
+        // FETCH MISSING PROPERTIES FOR PUPPY GRAPH
+        // Check if DB type is puppy and nodes/edges lack props
+        const { type } = req.body; // 'janus' or 'puppy'
+
+        if (type === 'puppy') {
+            // 1. Enrich Nodes
+            const nodesWithoutProps = [];
+            for (const n of nodes.values()) {
+                if (!n.properties || Object.keys(n.properties).length === 0) {
+                    nodesWithoutProps.push(n);
+                }
+            }
+
+            if (nodesWithoutProps.length > 0) {
+                // Fetch properties for these IDs using elementMap
+                // We batch this to avoid huge queries
+                const BATCH_SIZE_LIMIT = 500;
+                const chunk = nodesWithoutProps.slice(0, BATCH_SIZE_LIMIT);
+
+                const idList = chunk.map(n => {
+                    const id = n.id;
+                    if (typeof id === 'number') return id;
+                    // Use JSON.stringify for safety
+                    return JSON.stringify(id);
+                }).join(',');
+
+                const propQuery = `g.V(${idList}).elementMap()`;
+
                 try {
-                    // Re-open client or reuse (we closed it, so open new one)
-                    // Note: We need a Traversal based approach for parameter injection or careful string construction
-                    // Constructing a string query for ID list: g.V('id1', 'id2'...).bothE()...
-
-                    // Helper to quote string IDs if necessary (Gremlin IDs can be numbers or strings)
-                    // Assumption: simple IDs. For complex IDs, this simplistic joining might fail.
-                    // But for standard Gremlin Server (Long or UUID), string representation usually works or needs specific handling.
-                    // A safer way is using bindings, but for this quick feature:
-
-                    const idList = nodeIds.map(id => {
-                        // Attempt to detect if number
-                        if (typeof id === 'number') return id;
-                        return `'${id}'`;
-                    }).join(',');
-
-                    // Query: Get all edges where BOTH ends are in our nodeId set.
-                    // g.V(ids...).bothE().where(__.otherV().hasId(ids...))
-                    const edgeQuery = `g.V(${idList}).bothE().where(__.otherV().hasId(${idList})).dedup()`;
-
-                    const client2 = new gremlin.driver.Client(wsUrl, {
+                    // Run property fetch
+                    const clientProp = new gremlin.driver.Client(wsUrl, {
                         traversalSource: 'g',
                         mimeType: 'application/vnd.gremlin-v3.0+json'
                     });
-                    await client2.open();
-                    const edgeResult = await client2.submit(edgeQuery);
-                    await client2.close();
+                    await clientProp.open();
+                    console.log(`[Gremlin] Node Enrichment Query: ${propQuery}`);
+                    const propRes = await clientProp.submit(propQuery);
+                    await clientProp.close();
 
-                    let extraEdges = [];
-                    if (edgeResult && typeof edgeResult.toArray === 'function') {
-                        extraEdges = edgeResult.toArray();
-                    } else if (edgeResult && edgeResult._items) {
-                        extraEdges = edgeResult._items;
-                    }
+                    let propItems = [];
+                    if (propRes && typeof propRes.toArray === 'function') propItems = propRes.toArray();
+                    else if (propRes && propRes._items) propItems = propRes._items;
 
-                    extraEdges.forEach(item => {
-                        if (item && item.id && item.label && item.inV && item.outV) {
-                            // Use safe ID extraction
-                            const sId = getId(item.outV);
-                            const tId = getId(item.inV);
-
-                            // Only add if not exists
-                            if (!links.has(item.id)) {
-                                links.set(item.id, {
-                                    id: item.id,
-                                    source: sId,
-                                    target: tId,
-                                    label: item.label,
-                                    properties: item.properties || {}
-                                });
+                    // Helper to get ID from Map safely
+                    const getMapId = (m) => {
+                        let val = m.get('id');
+                        if (val) return val;
+                        // Try T.id (safe access)
+                        try {
+                            if (gremlin.process.t && gremlin.process.t.id) {
+                                val = m.get(gremlin.process.t.id);
+                                if (val) return val;
                             }
+                            if (gremlin.process.traversal && gremlin.process.traversal.t && gremlin.process.traversal.t.id) {
+                                val = m.get(gremlin.process.traversal.t.id);
+                                if (val) return val;
+                            }
+                        } catch (e) { /* ignore */ }
+                        return val;
+                    };
+
+                    propItems.forEach(item => {
+                        // elementMap returns {id:..., label:..., prop:val...}
+                        // We need to merge this into our nodes
+                        let id = item.id;
+                        let props = {};
+
+                        // If it's a Map (from gremlin-js), we need to extract.
+                        // Assuming simplified JSON behavior for this 'IDE'.
+                        if (!id && item instanceof Map) {
+                            id = getMapId(item);
+                        }
+                        // Convert Map to Object
+                        if (item instanceof Map) {
+                            item.forEach((value, key) => {
+                                const keyStr = String(key);
+                                props[keyStr] = value;
+                            });
+                        } else {
+                            props = { ...item };
+                        }
+
+                        // Find node in map
+                        // Clean up ID (sometimes elementMap returns ID differently?)
+                        const safeId = getId({ id });
+                        const safeKey = getSafeKey(safeId);
+
+                        const targetNode = nodes.get(safeKey);
+                        if (targetNode) {
+                            // Remove id, label from props if present as they are metadata
+                            delete props.id;
+                            delete props.label;
+                            targetNode.properties = { ...targetNode.properties, ...props };
+                        }
+                    });
+                } catch (err) {
+                    console.warn("Failed to enrich PuppyGraph node properties:", err);
+                }
+            }
+
+            // 2. Enrich Edges
+            // Puppy Graph might return empty properties for edges too.
+            const linksWithoutProps = [];
+            for (const l of links.values()) {
+                if (!l.properties || Object.keys(l.properties).length === 0) {
+                    linksWithoutProps.push(l);
+                }
+            }
+
+            if (linksWithoutProps.length > 0) {
+                const BATCH = 200; // Reduce batch size slightly as outE() can be larger
+                const chunk = linksWithoutProps.slice(0, BATCH);
+
+                try {
+                    // Strategy change: Direct g.E(id) lookup is failing for complex PuppyGraph IDs.
+                    // Fallback to Traversal: g.V(sourceIds).outE().elementMap()
+                    // This relies on Vertex IDs which are known to work.
+
+                    const sourceIdSet = new Set();
+                    chunk.forEach(l => {
+                        // l.source is the ID.
+                        // We need to ensure we handle it as we did for Node enrichment.
+                        sourceIdSet.add(l.source);
+                    });
+
+                    const sourceIds = Array.from(sourceIdSet);
+
+                    // Serialize Source IDs
+                    const idList = sourceIds.map(id => {
+                        if (typeof id === 'number') return id;
+                        // Use JSON.stringify for safety
+                        return JSON.stringify(id);
+                    }).join(',');
+
+                    // Fetch ALL out-edges for these sources with properties.
+                    // We will match them back to our links map in memory.
+                    // Fetch ALL out-edges for these sources with properties.
+                    // We will match them back to our links map in memory.
+                    // Strategy: Split keys and values into separate lists to avoid Map construction bugs in DB.
+                    // Use bothE() to handle potential direction confusion
+                    const propQuery = `g.V(${idList}).bothE().project('id', 'keys', 'vals').by(__.id()).by(__.properties().key().fold()).by(__.properties().value().fold())`;
+
+                    const clientProp = new gremlin.driver.Client(wsUrl, {
+                        traversalSource: 'g',
+                        mimeType: 'application/vnd.gremlin-v3.0+json'
+                    });
+                    await clientProp.open();
+                    console.log(`[Gremlin] Edge Enrichment Query: ${propQuery}`);
+                    const propRes = await clientProp.submit(propQuery);
+                    await clientProp.close();
+
+                    let propItems = [];
+                    if (propRes && typeof propRes.toArray === 'function') propItems = propRes.toArray();
+                    else if (propRes && propRes._items) propItems = propRes._items;
+
+                    propItems.forEach(item => {
+                        let id;
+                        let keysArr = [];
+                        let valsArr = [];
+
+                        // Extract result from Project (Map or Object)
+                        if (item instanceof Map) {
+                            id = item.get('id');
+                            keysArr = item.get('keys');
+                            valsArr = item.get('vals');
+                        } else {
+                            id = item.id;
+                            keysArr = item.keys;
+                            valsArr = item.vals;
+                        }
+
+                        // Zip keys and values into props object
+                        let props = {};
+                        const kList = Array.isArray(keysArr) ? keysArr : (keysArr ? Array.from(keysArr) : []);
+                        const vList = Array.isArray(valsArr) ? valsArr : (valsArr ? Array.from(valsArr) : []);
+                        if (kList.length > 0) {
+                            kList.forEach((k, i) => { if (i < vList.length) props[String(k)] = vList[i]; });
+                        }
+
+                        // Check ID
+                        // Edges usually have string/number IDs. 
+                        // Clean up ID
+                        const safeId = getId({ id });
+                        const safeKey = getSafeKey(safeId);
+
+                        // Look up using safe key
+                        let targetLink = links.get(safeKey);
+
+                        // Fallback: If not found by safe key, try loose string matching
+                        // This handles cases where ID exists but types differ (Number vs String)
+                        // or object key order differences where getSafeKey might fail to align perfectly
+                        if (!targetLink) {
+                            const paramsIdStr = String(id);
+                            // We can iterate values since size is usually small (BATCH=200) or total graph is small
+                            for (const l of links.values()) {
+                                if (String(l.id) === paramsIdStr) {
+                                    targetLink = l;
+                                    break;
+                                }
+                                // Try verified JSON representation if object
+                                if (l.id && typeof l.id === 'object' && id && typeof id === 'object') {
+                                    // Use robust safeKey on both
+                                    if (getSafeKey(l.id) === getSafeKey(id)) {
+                                        targetLink = l;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        if (targetLink) {
+                            delete props.id;
+                            delete props.label;
+                            // Remove direction keys (IN/OUT) which come with elementMap
+                            delete props.IN;
+                            delete props.OUT;
+                            // Also map keys if present (by string representation)
+                            delete props['Direction.IN'];
+                            delete props['Direction.OUT']; // Just in case
+
+                            targetLink.properties = { ...targetLink.properties, ...props };
                         }
                     });
 
                 } catch (err) {
-                    console.warn("Failed to fetch induced edges:", err);
-                    // Swallow error, main query result is still valid
+                    console.warn("Failed to enrich PuppyGraph edge properties:", err);
                 }
             }
         }
@@ -165,14 +446,13 @@ export default async function handler(req, res) {
         res.status(200).json({
             raw: items,
             graph: {
-                // Ensure we return arrays
                 nodes: Array.from(nodes.values()),
                 links: Array.from(links.values())
             }
         });
 
-    } catch (error) {
-        console.error('Gremlin Error:', error);
-        res.status(500).json({ error: error.message, stack: error.stack });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: err.message || 'Error processing query' });
     }
 }
