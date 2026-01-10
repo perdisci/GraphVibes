@@ -142,6 +142,8 @@ export default function Home() {
     const [query, setQuery] = useState('// Click on Run Query to execute\ng.V().limit(50)');
     const [data, setData] = useState({ nodes: [], links: [] });
     const [raw, setRaw] = useState(null);
+    const [executionLog, setExecutionLog] = useState([]);
+    const [showBackgroundQueries, setShowBackgroundQueries] = useState(true);
     const [profilingData, setProfilingData] = useState(null);
     const [explanationData, setExplanationData] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -485,6 +487,7 @@ export default function Home() {
             setData(cleaned);
 
             setRaw(result.raw);
+            setExecutionLog(result.executionLog || []);
 
             // 2. Run Profiling Query
             const profilingQuery = `${cleanQuery}.profile()`;
@@ -627,6 +630,11 @@ export default function Home() {
                     links: validLinks
                 };
             });
+
+            // Append new execution logs to the existing history
+            if (result.executionLog && result.executionLog.length > 0) {
+                setExecutionLog(prev => [...prev, ...result.executionLog]);
+            }
 
         } catch (err) {
             setError(err.message);
@@ -1013,13 +1021,23 @@ export default function Home() {
                                     onClick={() => setIsResultsCollapsed(!isResultsCollapsed)}
                                 >
                                     <h3 style={{ margin: 0, fontSize: '0.9rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                        <Layers size={14} /> RAW RESULTS
+                                        <Layers size={14} /> RESULTS
                                     </h3>
                                     {isResultsCollapsed ? <ChevronUp size={14} color="#94a3b8" /> : <ChevronDown size={14} color="#94a3b8" />}
                                 </div>
 
                                 {!isResultsCollapsed && (
-                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                        <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '0.25rem', cursor: 'pointer', marginRight: '0.5rem' }} title="Show internal queries executed in background">
+                                            <input
+                                                type="checkbox"
+                                                checked={showBackgroundQueries}
+                                                onChange={(e) => setShowBackgroundQueries(e.target.checked)}
+                                                onClick={(e) => e.stopPropagation()}
+                                                style={{ cursor: 'pointer' }}
+                                            />
+                                            Background Queries
+                                        </label>
                                         <button
                                             onClick={handleCopy}
                                             title="Copy raw JSON"
@@ -1054,7 +1072,28 @@ export default function Home() {
                                 )}
                             </div>
                             {!isResultsCollapsed && (
-                                <pre style={{ flex: 1, overflow: 'auto', margin: 0 }}>{raw ? JSON.stringify(raw, null, 2) : '// Results will appear here'}</pre>
+                                <div style={{ flex: 1, overflow: 'auto', margin: 0, display: 'flex', flexDirection: 'column', gap: '1rem', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                                    {executionLog && executionLog.length > 0 ? (
+                                        executionLog.map((log, i) => {
+                                            if (!showBackgroundQueries && log.type !== 'Main Query') return null;
+                                            return (
+                                                <div key={i} style={{ borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
+                                                    <div style={{ color: 'var(--primary)', fontWeight: 'bold', marginBottom: '0.25rem' }}>
+                                                        {i + 1}. {log.type}
+                                                    </div>
+                                                    <div style={{ color: 'var(--text-dim)', marginBottom: '0.5rem', whiteSpace: 'pre-wrap' }}>
+                                                        Query: {log.query}
+                                                    </div>
+                                                    <pre style={{ margin: 0, color: 'var(--text-main)' }}>
+                                                        {JSON.stringify(log.result, null, 2)}
+                                                    </pre>
+                                                </div>
+                                            );
+                                        })
+                                    ) : (
+                                        <pre style={{ margin: 0 }}>{raw ? JSON.stringify(raw, null, 2) : '// Results will appear here'}</pre>
+                                    )}
+                                </div>
                             )}
                         </div>
 

@@ -1,9 +1,34 @@
 import { connect } from '../../lib/gremlinClient';
 
 // Helper to serialize Gremlin results roughly to JSON
+// Helper to serialize Gremlin results roughly to JSON
 const formatResult = (item) => {
-    // Basic simplification
-    return JSON.parse(JSON.stringify(item));
+    if (item === null || item === undefined) return item;
+    if (typeof item === 'bigint') return Number(item);
+
+    if (item instanceof Map) {
+        const obj = {};
+        for (const [key, value] of item.entries()) {
+            obj[String(key)] = formatResult(value);
+        }
+        return obj;
+    }
+
+    if (Array.isArray(item)) {
+        return item.map(formatResult);
+    }
+
+    if (typeof item === 'object') {
+        const obj = {};
+        for (const key in item) {
+            if (Object.prototype.hasOwnProperty.call(item, key)) {
+                obj[key] = formatResult(item[key]);
+            }
+        }
+        return obj;
+    }
+
+    return item;
 };
 
 export default async function handler(req, res) {
@@ -18,6 +43,7 @@ export default async function handler(req, res) {
     }
 
     const wsUrl = `ws://${host}:${port}/gremlin`;
+    const executionLog = []; // Record of all queries executed this request
 
     try {
         // In a real generic query runner, we'd use the script executor.
@@ -134,6 +160,8 @@ export default async function handler(req, res) {
         await client.open();
         console.log(`[Gremlin] Main Query: ${query}`);
         const result = await client.submit(query);
+        console.log(`[Gremlin] Main Query Results: ${result}`);
+        console.dir(result._items);
         await client.close();
 
         // Process graph data: extract vertices and edges if present
@@ -146,6 +174,13 @@ export default async function handler(req, res) {
         } else if (result && result._items) {
             items = result._items;
         }
+
+        executionLog.push({
+            type: 'Main Query',
+            query: query,
+            // Create a simple deep clone to snapshot the raw result before any processing
+            result: items.map(i => formatResult(i))
+        });
 
         // Helper to extract ID safely
         const getId = (obj) => {
@@ -245,11 +280,19 @@ export default async function handler(req, res) {
                     await clientConnect.open();
                     console.log(`[Gremlin] Auto-Connect Query: ${connectQuery}`);
                     const connectRes = await clientConnect.submit(connectQuery);
+                    console.log(`[Gremlin] Auto-Connect Query Results: ${connectRes}`);
+                    console.dir(connectRes._items);
                     await clientConnect.close();
 
                     let edgeItems = [];
                     if (connectRes && typeof connectRes.toArray === 'function') edgeItems = connectRes.toArray();
                     else if (connectRes && connectRes._items) edgeItems = connectRes._items;
+
+                    executionLog.push({
+                        type: 'Auto-Connect (Background)',
+                        query: connectQuery,
+                        result: edgeItems.map(i => formatResult(i))
+                    });
 
                     const safeNodeKeys = new Set(Array.from(nodes.keys())); // Using getSafeKey keys
 
@@ -347,6 +390,12 @@ export default async function handler(req, res) {
                     let propItems = [];
                     if (propRes && typeof propRes.toArray === 'function') propItems = propRes.toArray();
                     else if (propRes && propRes._items) propItems = propRes._items;
+
+                    executionLog.push({
+                        type: 'Node Enrichment (PuppyGraph)',
+                        query: propQuery,
+                        result: propItems.map(i => formatResult(i))
+                    });
 
                     // Helper to get ID from Map safely
                     const getMapId = (m) => {
@@ -454,11 +503,19 @@ export default async function handler(req, res) {
                     await clientProp.open();
                     console.log(`[Gremlin] Edge Enrichment Query: ${propQuery}`);
                     const propRes = await clientProp.submit(propQuery);
+                    console.log(`[Gremlin] Edge Enrichment Query Results: ${propRes}`);
+                    console.dir(propRes._items);
                     await clientProp.close();
 
                     let propItems = [];
                     if (propRes && typeof propRes.toArray === 'function') propItems = propRes.toArray();
                     else if (propRes && propRes._items) propItems = propRes._items;
+
+                    executionLog.push({
+                        type: 'Edge Enrichment (PuppyGraph)',
+                        query: propQuery,
+                        result: propItems.map(i => formatResult(i))
+                    });
 
                     propItems.forEach(item => {
                         let id;
@@ -537,6 +594,7 @@ export default async function handler(req, res) {
 
         res.status(200).json({
             raw: items,
+            executionLog,
             graph: {
                 nodes: Array.from(nodes.values()),
                 links: Array.from(links.values())
