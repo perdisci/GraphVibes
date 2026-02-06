@@ -248,8 +248,91 @@ export default async function handler(req, res) {
         // If nodes/links are empty (e.g. valueMap, or just IDs), we might need to handle differently
         // But for the Visualizer, we expect nodes/edges.
 
-        // If nodes/links are empty (e.g. valueMap, or just IDs), we might need to handle differently
-        // But for the Visualizer, we expect nodes/edges.
+        // --- FETCH MISSING NODES FROM EDGES ---
+        // If we have edges but are missing their source/target nodes, fetch them.
+        try {
+            // Re-check nodes map to see what we have vs what edges reference
+            const missingNodeIds = new Set();
+            for (const l of links.values()) {
+                const srcId = l.source;
+                const tgtId = l.target;
+
+                // Check using safe key lookup
+                const srcKey = getSafeKey(srcId);
+                const tgtKey = getSafeKey(tgtId);
+
+                // If node is not in our loaded nodes map, add to missing list
+                if (!nodes.has(srcKey)) missingNodeIds.add(srcId);
+                if (!nodes.has(tgtKey)) missingNodeIds.add(tgtId);
+            }
+
+            if (missingNodeIds.size > 0) {
+                console.log(`[Gremlin] Found ${missingNodeIds.size} missing nodes referenced by edges. Fetching...`);
+
+                // Convert value set to array
+                const idArray = Array.from(missingNodeIds);
+
+                // Batch params
+                const BATCH_SIZE = 500;
+                for (let i = 0; i < idArray.length; i += BATCH_SIZE) {
+                    const chunk = idArray.slice(i, i + BATCH_SIZE);
+
+                    const idList = chunk.map(id => {
+                        if (typeof id === 'number') return id;
+                        return JSON.stringify(id);
+                    }).join(',');
+
+                    // Fetch simple elementMap to get node details (label, props)
+                    const fetchQuery = `g.V(${idList}).elementMap()`;
+
+                    const clientFetch = new gremlin.driver.Client(wsUrl, {
+                        traversalSource: 'g',
+                        mimeType: 'application/vnd.gremlin-v3.0+json'
+                    });
+                    await clientFetch.open();
+                    console.log(`[Gremlin] Missing Node Fetch Query: ${fetchQuery}`);
+                    const fetchRes = await clientFetch.submit(fetchQuery);
+                    await clientFetch.close();
+
+                    let fetchedItems = [];
+                    if (fetchRes && typeof fetchRes.toArray === 'function') fetchedItems = fetchRes.toArray();
+                    else if (fetchRes && fetchRes._items) fetchedItems = fetchRes._items;
+
+                    executionLog.push({
+                        type: 'Missing Node Fetch',
+                        query: fetchQuery,
+                        result: fetchedItems.map(i => formatResult(i))
+                    });
+
+                    // Merge into nodes map
+                    fetchedItems.forEach(item => {
+                        if (item) {
+                            // Handle Map vs Object (elementMap usually returns Map in JS driver unless configured)
+                            let realItem = item;
+                            if (item instanceof Map) {
+                                const obj = {};
+                                item.forEach((v, k) => { obj[String(k)] = v; });
+                                realItem = obj;
+                            }
+
+                            // Extract ID. elementMap usually has 'id' and 'label' fields.
+                            const safeId = getId(realItem);
+                            const safeKey = getSafeKey(safeId);
+
+                            if (!nodes.has(safeKey)) {
+                                nodes.set(safeKey, {
+                                    id: safeId,
+                                    label: realItem.label || 'unknown',
+                                    properties: realItem // Store all props
+                                });
+                            }
+                        }
+                    });
+                }
+            }
+        } catch (missingErr) {
+            console.warn("Failed to fetch missing nodes:", missingErr);
+        }
 
         // --- AUTO-CONNECT NODES FEATURE ---
         const { type, autoConnect } = req.body; // 'janus' or 'puppy'
