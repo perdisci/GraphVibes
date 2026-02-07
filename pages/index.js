@@ -182,7 +182,7 @@ export default function Home() {
         port: '8182',
         type: 'janus' // 'janus' or 'puppy'
     });
-    const [autoConnect, setAutoConnect] = useState(false);
+    const [autoConnect, setAutoConnect] = useState(true);
     const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'connected', 'connecting', 'disconnected'
 
     // Theme Settings
