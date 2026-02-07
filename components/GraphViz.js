@@ -1,6 +1,6 @@
 import React, { useRef, useImperativeHandle, useState } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
-import { ZoomIn, ZoomOut, Focus, Maximize2, Minimize2, Settings, RotateCcw, ChevronDown, ChevronUp, Download } from 'lucide-react';
+import { ZoomIn, ZoomOut, Focus, Maximize2, Minimize2, Settings, RotateCcw, ChevronDown, ChevronUp, Download, Trash2 } from 'lucide-react';
 import { jsPDF } from "jspdf";
 
 const GraphViz = ({
@@ -18,7 +18,8 @@ const GraphViz = ({
     edgePalette,
     labelStyle = 'glass',
     nodeLabelPreferences = {},
-    forwardedRef
+    forwardedRef,
+    onClear // New prop
 }) => {
     const fgRef = useRef();
     const containerRef = useRef();
@@ -668,6 +669,9 @@ const GraphViz = ({
                 <button className="control-btn" onClick={onMaximize} title={isMaximized ? "Minimize" : "Maximize"}>
                     {isMaximized ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
                 </button>
+                <div style={{ height: '1px', background: 'var(--border)', margin: '4px 0' }} />
+                <button className="control-btn" onClick={onClear} title="Clear Graph" style={{ color: '#ef4444' }}><Trash2 size={18} /></button>
+                <div style={{ height: '1px', background: 'var(--border)', margin: '4px 0' }} />
                 <button className="control-btn" onClick={onSettings} title="Graph Settings"><Settings size={18} /></button>
             </div>
         </div>

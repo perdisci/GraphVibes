@@ -1,7 +1,7 @@
 import Head from 'next/head';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Play, Activity, Database, Layers, Banana, Copy, ExternalLink, Check, ZoomIn, ZoomOut, Maximize2, Minimize2, Settings, Focus, X, Link, AlertCircle, Loader, Palette, Info, ChevronUp, ChevronDown, GripHorizontal, Timer, BookOpen, Search, Trash2 } from 'lucide-react';
+import { Play, Activity, Database, Layers, Banana, Copy, ExternalLink, Check, ZoomIn, ZoomOut, Maximize2, Minimize2, Settings, Focus, X, Link, AlertCircle, Loader, Palette, Info, ChevronUp, ChevronDown, GripHorizontal, Timer, BookOpen, Search, Trash2, Square } from 'lucide-react';
 import { GRAPH_PALETTES } from '../utils/palettes';
 
 const GraphViz = dynamic(() => import('../components/GraphViz'), {
@@ -561,7 +561,11 @@ export default function Home() {
             }
 
         } catch (err) {
-            setError(err.message);
+            if (err.name === 'AbortError' || err.message.includes('aborted')) {
+                setError("Query cancelled by user.");
+            } else {
+                setError(err.message);
+            }
         } finally {
             setLoading(false);
         }
@@ -883,6 +887,7 @@ export default function Home() {
     // Node Label Preferences
     const [nodeLabelPreferences, setNodeLabelPreferences] = useState({});
 
+
     const handlePropertyClick = (nodeType, propertyKey) => {
         if (!nodeType) return;
         setNodeLabelPreferences(prev => {
@@ -892,6 +897,17 @@ export default function Home() {
             const next = current === propertyKey ? null : propertyKey;
             return { ...prev, [nodeType]: next };
         });
+    };
+
+    const handleClearGraph = () => {
+        setData({ nodes: [], links: [] });
+        setRaw(null);
+        setExecutionLog([]);
+        setProfilingData(null);
+        setExplanationData(null);
+        setSelectedElement(null);
+        setQueryDuration(null);
+        setError(null);
     };
 
     return (
@@ -1039,7 +1055,7 @@ export default function Home() {
                                 }}
                                 title="Stop Request"
                             >
-                                <X size={16} />
+                                <Square size={16} fill="currentColor" />
                             </button>
                         </div>
                         {queryDuration !== null && !loading && (
@@ -1442,6 +1458,7 @@ export default function Home() {
                             isMaximized={isMaximized}
                             onSettings={() => setIsSettingsOpen(true)}
                             nodeLabelPreferences={nodeLabelPreferences}
+                            onClear={handleClearGraph}
                         />
                     </div>
 
