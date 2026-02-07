@@ -150,6 +150,18 @@ export default function Home() {
     const [queryDuration, setQueryDuration] = useState(null);
     const [error, setError] = useState(null);
 
+    // Abort Controller for Query Cancellation
+    const abortControllerRef = useRef(null);
+
+    const handleStopQuery = () => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+            setLoading(false);
+            setError("Query cancelled by user.");
+        }
+    };
+
     const [selectedElement, setSelectedElement] = useState(null);
     const [copied, setCopied] = useState(false);
     const [copiedProperty, setCopiedProperty] = useState(null);
@@ -459,11 +471,19 @@ export default function Home() {
             // Strip comments and trailing semicolons/whitespace to append .profile() safely
             const cleanQuery = query.replace(/\/\/.*$/gm, '').trim().replace(/;+$/, '');
 
+            // Create new AbortController
+            if (abortControllerRef.current) {
+                abortControllerRef.current.abort();
+            }
+            const controller = new AbortController();
+            abortControllerRef.current = controller;
+
             // 1. Run Main Query
             const startTime = performance.now(); // Start timer
             const res = await fetch('/api/query', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                signal: controller.signal,
                 body: JSON.stringify({
                     query: cleanQuery, // Use cleanQuery here
                     host: connectionSettings.host,
@@ -496,6 +516,7 @@ export default function Home() {
                 const profileRes = await fetch('/api/query', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    signal: controller.signal,
                     body: JSON.stringify({
                         query: profilingQuery,
                         host: connectionSettings.host,
@@ -520,6 +541,7 @@ export default function Home() {
                 const explainRes = await fetch('/api/query', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    signal: controller.signal,
                     body: JSON.stringify({
                         query: explanationQuery,
                         host: connectionSettings.host,
@@ -989,9 +1011,37 @@ export default function Home() {
                                 }}
                             />
                         </div>
-                        <button className="btn" onClick={handleRunQuery} disabled={loading} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                            {loading ? 'Running...' : <><Play size={16} /> Run Query</>}
-                        </button>
+                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                            <button
+                                className="btn"
+                                onClick={handleRunQuery}
+                                disabled={loading}
+                                style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
+                            >
+                                {loading ? 'Running...' : <><Play size={16} /> Run Query</>}
+                            </button>
+                            <button
+                                className="btn"
+                                onClick={handleStopQuery}
+                                disabled={!loading}
+                                style={{
+                                    width: '40px',
+                                    background: loading ? '#ef4444' : 'var(--bg-secondary)',
+                                    color: loading ? 'white' : 'var(--text-dim)',
+                                    display: 'flex',
+                                    justifyContent: 'center',
+                                    alignItems: 'center',
+                                    border: '1px solid var(--border)',
+                                    padding: 0,
+                                    opacity: loading ? 1 : 0.5,
+                                    cursor: loading ? 'pointer' : 'not-allowed',
+                                    transition: 'all 0.2s ease'
+                                }}
+                                title="Stop Request"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
                         {queryDuration !== null && !loading && (
                             <div style={{ textAlign: 'center', fontSize: '0.75rem', color: '#64748b', marginBottom: '0.5rem' }}>
                                 Last run: {queryDuration.toFixed(2)}ms

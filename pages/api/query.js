@@ -157,6 +157,12 @@ export default async function handler(req, res) {
             mimeType: 'application/vnd.gremlin-v3.0+json'
         });
 
+        // HANDLE CANCELLATION
+        req.on('close', () => {
+            console.log("[API] Client closed connection, terminating Gremlin query...");
+            client.close().catch(e => console.error("Error closing Gremlin client on abort", e));
+        });
+
         await client.open();
         console.log(`[Gremlin] Main Query: ${query}`);
         const result = await client.submit(query);
