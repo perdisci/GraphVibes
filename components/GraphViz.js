@@ -25,6 +25,7 @@ const GraphViz = ({
     const containerRef = useRef();
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
     const [isLegendOpen, setIsLegendOpen] = useState(true);
+    const [hiddenEdgeLabels, setHiddenEdgeLabels] = useState(new Set()); // New state
 
     // Custom Color Palette (Internal Default)
     const DEFAULT_PALETTE = [
@@ -249,9 +250,20 @@ const GraphViz = ({
                 }
             }
         });
-    }, [data]);
+    }, [data, hiddenEdgeLabels]);
 
     const effectiveDagMode = ['td', 'bu', 'lr', 'rl', 'radialout', 'radialin'].includes(dagMode) ? dagMode : undefined;
+
+    // Filter Data based on Hidden Labels
+    const filteredData = React.useMemo(() => {
+        if (!data) return { nodes: [], links: [] };
+        if (hiddenEdgeLabels.size === 0) return data;
+
+        return {
+            nodes: data.nodes,
+            links: data.links.filter(l => !hiddenEdgeLabels.has(l.label))
+        };
+    }, [data, hiddenEdgeLabels]);
 
     const handleZoomIn = () => {
         if (fgRef.current) {
@@ -580,7 +592,7 @@ const GraphViz = ({
                 ref={fgRef}
                 width={dimensions.width}
                 height={dimensions.height}
-                graphData={data}
+                graphData={filteredData}
                 nodeLabel="label"
                 nodeColor={getNodeColor}
                 linkDirectionalArrowLength={3.5}
@@ -648,12 +660,35 @@ const GraphViz = ({
                         {/* Edges */}
                         <div>
                             <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Edges</div>
-                            {Array.from(new Set(data.links.map(l => l.label))).map(label => (
-                                <div key={`link-${label}`} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                                    <div style={{ width: '12px', height: '2px', background: getLinkColor({ label }) }} />
-                                    <span style={{ fontSize: '0.85rem' }}>{label}</span>
-                                </div>
-                            ))}
+                            {Array.from(new Set(data.links.map(l => l.label))).map(label => {
+                                const isHidden = hiddenEdgeLabels.has(label);
+                                return (
+                                    <div
+                                        key={`link-${label}`}
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '0.5rem',
+                                            marginBottom: '0.25rem',
+                                            cursor: 'pointer',
+                                            opacity: isHidden ? 0.5 : 1,
+                                            textDecoration: isHidden ? 'line-through' : 'none'
+                                        }}
+                                        onClick={() => {
+                                            setHiddenEdgeLabels(prev => {
+                                                const next = new Set(prev);
+                                                if (next.has(label)) next.delete(label);
+                                                else next.add(label);
+                                                return next;
+                                            });
+                                        }}
+                                        title={isHidden ? "Click to show" : "Click to hide"}
+                                    >
+                                        <div style={{ width: '12px', height: '2px', background: getLinkColor({ label }) }} />
+                                        <span style={{ fontSize: '0.85rem' }}>{label}</span>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 )}
