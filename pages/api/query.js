@@ -341,7 +341,7 @@ export default async function handler(req, res) {
         }
 
         // --- AUTO-CONNECT NODES FEATURE ---
-        const { type, autoConnect } = req.body; // 'janus' or 'puppy'
+        const { type, autoConnect, enrich } = req.body; // 'janus' or 'puppy', enrich is boolean
 
         if (autoConnect && nodes.size > 0) {
             try {
@@ -358,9 +358,14 @@ export default async function handler(req, res) {
                         return JSON.stringify(id);
                     }).join(',');
 
-                    // Query: Find all edges connected to these nodes.
-                    // We use robust project for max compatibility.
-                    const connectQuery = `g.V(${idList}).bothE().project('id', 'label', 'inV', 'outV', 'keys', 'vals').by(__.id()).by(__.label()).by(__.inV().id()).by(__.outV().id()).by(__.properties().key().fold()).by(__.properties().value().fold())`;
+                    // Query: Find all edges connecting ANY two nodes in the provided list.
+                    // Optimized:
+                    // 1. Start from nodes: g.V(ids)
+                    // 2. Traverse edges: .bothE()
+                    // 3. Filter: Keep only edges where the *other* end is ALSO in our list: .where(__.otherV().hasId(ids))
+                    // 4. Deduplicate: .dedup() to remove double-counting (since A-B is found from both A and B)
+                    // 5. Project: Return data
+                    const connectQuery = `g.V(${idList}).bothE().where(__.otherV().hasId(${idList})).dedup().project('id', 'label', 'inV', 'outV', 'keys', 'vals').by(__.id()).by(__.label()).by(__.inV().id()).by(__.outV().id()).by(__.properties().key().fold()).by(__.properties().value().fold())`;
 
                     const clientConnect = new gremlin.driver.Client(wsUrl, {
                         traversalSource: 'g',
@@ -441,7 +446,7 @@ export default async function handler(req, res) {
         // FETCH MISSING PROPERTIES FOR PUPPY GRAPH
         // Check if DB type is puppy and nodes/edges lack props
 
-        if (type === 'puppy') {
+        if (type === 'puppy' && enrich) {
             // 1. Enrich Nodes
             const nodesWithoutProps = [];
             for (const n of nodes.values()) {

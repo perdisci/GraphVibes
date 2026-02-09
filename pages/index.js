@@ -138,17 +138,33 @@ const formatExplainData = (rawData) => {
     return output || JSON.stringify(explainObj, null, 2);
 };
 
+const logServerQueries = (logs) => {
+    if (!logs || !Array.isArray(logs)) return;
+    logs.forEach(log => {
+        if (log.type === 'Main Query') return; // Already logged by client before sending
+        console.groupCollapsed(`[Background] ${log.type}`);
+        console.log(log.query);
+        console.log("Result Preview:", log.result ? log.result.slice(0, 5) : 'No result');
+        console.groupEnd();
+    });
+};
+
 export default function Home() {
     const [query, setQuery] = useState('// Click on Run Query to execute\ng.V().limit(50)');
     const [data, setData] = useState({ nodes: [], links: [] });
     const [raw, setRaw] = useState(null);
     const [executionLog, setExecutionLog] = useState([]);
-    const [showBackgroundQueries, setShowBackgroundQueries] = useState(true);
+    const [showBackgroundQueries, setShowBackgroundQueries] = useState(false);
     const [profilingData, setProfilingData] = useState(null);
     const [explanationData, setExplanationData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [queryDuration, setQueryDuration] = useState(null);
     const [error, setError] = useState(null);
+
+    // Profiling State
+    const [lastQuery, setLastQuery] = useState(null);
+    const [isProfiling, setIsProfiling] = useState(false);
+    const [isExplaining, setIsExplaining] = useState(false);
 
     // Abort Controller for Query Cancellation
     const abortControllerRef = useRef(null);
@@ -193,8 +209,10 @@ export default function Home() {
         host: 'localhost',
         port: '8182',
         type: 'janus' // 'janus' or 'puppy'
+
     });
-    const [autoConnect, setAutoConnect] = useState(true);
+    const [autoConnect, setAutoConnect] = useState(false);
+    const [enrich, setEnrich] = useState(false);
     const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'connected', 'connecting', 'disconnected'
 
     // Theme Settings
@@ -479,6 +497,7 @@ export default function Home() {
             abortControllerRef.current = controller;
 
             // 1. Run Main Query
+            console.log("Executing Main Query:", cleanQuery);
             const startTime = performance.now(); // Start timer
             const res = await fetch('/api/query', {
                 method: 'POST',
@@ -489,7 +508,8 @@ export default function Home() {
                     host: connectionSettings.host,
                     port: connectionSettings.port,
                     type: connectionSettings.type,
-                    autoConnect: autoConnect // Pass the flag
+                    autoConnect: autoConnect,
+                    enrich: enrich
                 }),
             });
 
@@ -506,59 +526,13 @@ export default function Home() {
             const cleaned = validateAndCleanGraph(result.graph.nodes, result.graph.links);
             setData(cleaned);
 
+
             setRaw(result.raw);
-            setExecutionLog(result.executionLog || []);
+            const logs = result.executionLog || [];
+            setExecutionLog(logs);
+            logServerQueries(logs);
 
-            // 2. Run Profiling Query
-            const profilingQuery = `${cleanQuery}.profile()`;
-
-            try {
-                const profileRes = await fetch('/api/query', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    signal: controller.signal,
-                    body: JSON.stringify({
-                        query: profilingQuery,
-                        host: connectionSettings.host,
-                        port: connectionSettings.port,
-                        type: connectionSettings.type
-                    }),
-                });
-
-                if (profileRes.ok) {
-                    const profileResult = await profileRes.json();
-                    setProfilingData(profileResult.raw);
-                } else {
-                    console.warn("Profiling failed", await profileRes.text());
-                }
-            } catch (profileErr) {
-                console.warn("Profiling execution error", profileErr);
-            }
-
-            // 3. Run Explanation Query
-            const explanationQuery = `${cleanQuery}.explain()`;
-            try {
-                const explainRes = await fetch('/api/query', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    signal: controller.signal,
-                    body: JSON.stringify({
-                        query: explanationQuery,
-                        host: connectionSettings.host,
-                        port: connectionSettings.port,
-                        type: connectionSettings.type
-                    }),
-                });
-
-                if (explainRes.ok) {
-                    const explainResult = await explainRes.json();
-                    setExplanationData(explainResult.raw);
-                } else {
-                    console.warn("Explanation failed", await explainRes.text());
-                }
-            } catch (explainErr) {
-                console.warn("Explanation execution error", explainErr);
-            }
+            setLastQuery(cleanQuery); // Store for on-demand profiling and explanation
 
         } catch (err) {
             if (err.name === 'AbortError' || err.message.includes('aborted')) {
@@ -575,6 +549,7 @@ export default function Home() {
         setLoading(true);
         setError(null);
         try {
+            console.log("Executing Expand/Merge Query:", query);
             const res = await fetch('/api/query', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -583,9 +558,11 @@ export default function Home() {
                     host: connectionSettings.host,
                     port: connectionSettings.port,
                     type: connectionSettings.type,
-                    autoConnect: autoConnect
+                    autoConnect: autoConnect,
+                    enrich: enrich
                 })
             });
+
 
             if (!res.ok) {
                 const errData = await res.json();
@@ -657,15 +634,132 @@ export default function Home() {
                 };
             });
 
+
+
             // Append new execution logs to the existing history
             if (result.executionLog && result.executionLog.length > 0) {
                 setExecutionLog(prev => [...prev, ...result.executionLog]);
+                logServerQueries(result.executionLog);
             }
 
         } catch (err) {
             setError(err.message);
         } finally {
             setLoading(false);
+        }
+    };
+
+
+    const handleBackgroundQueriesChange = async (e) => {
+        const isChecked = e.target.checked;
+        setShowBackgroundQueries(isChecked);
+        setAutoConnect(isChecked);
+        setEnrich(isChecked);
+
+        if (isChecked && data.nodes.length > 0) {
+            // Trigger an immediate "Refresh" to find edges
+            // We do this by sending the current node IDs to the server with autoConnect=true
+            const nodeIds = data.nodes.map(n => {
+                if (typeof n.id === 'string') return `"${n.id}"`;
+                return n.id;
+            });
+
+            // Limit to avoid massive query string or server load
+            if (nodeIds.length > 0 && nodeIds.length < 500) {
+                // We re-fetch these nodes. The server will see `autoConnect: true` and adding edges.
+                // We use a simple g.V(ids) query.
+                // Note: We need to be careful about ID formatting for Gremlin string.
+                const idQuery = `g.V(${nodeIds.join(',')})`;
+                await fetchAndMerge(idQuery);
+            }
+        }
+    };
+
+    const handleRunProfiling = async (e) => {
+        e.stopPropagation();
+        if (!lastQuery) return;
+
+        setIsProfiling(true);
+        const profilingQuery = `${lastQuery}.profile()`;
+
+        try {
+            console.log("Executing Profiling Query:", profilingQuery);
+            const profileRes = await fetch('/api/query', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    query: profilingQuery,
+                    host: connectionSettings.host,
+                    port: connectionSettings.port,
+                    type: connectionSettings.type,
+                    autoConnect: autoConnect
+                }),
+            });
+
+            if (profileRes.ok) {
+                const profileResult = await profileRes.json();
+                setProfilingData(profileResult.raw);
+                // Profiling doesn't usually return an executionLog of background stuff, but if it did:
+                if (profileResult.executionLog) logServerQueries(profileResult.executionLog);
+
+                if (!isProfilingCollapsed) {
+                    // Already open
+                } else {
+                    setIsProfilingCollapsed(false);
+                }
+            } else {
+                console.warn("Profiling failed", await profileRes.text());
+                setError("Profiling failed: " + await profileRes.text());
+            }
+        } catch (profileErr) {
+            console.warn("Profiling execution error", profileErr);
+            setError("Profiling error: " + profileErr.message);
+        } finally {
+            setIsProfiling(false);
+        }
+    };
+
+    const handleRunExplanation = async (e) => {
+        e.stopPropagation();
+        if (!lastQuery) return;
+
+        setIsExplaining(true);
+        const explanationQuery = `${lastQuery}.explain()`;
+
+        try {
+            console.log("Executing Explanation Query:", explanationQuery);
+            const explainRes = await fetch('/api/query', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    query: explanationQuery,
+                    host: connectionSettings.host,
+                    port: connectionSettings.port,
+                    type: connectionSettings.type,
+                    autoConnect: autoConnect
+                }),
+            });
+
+            if (explainRes.ok) {
+                const explainResult = await explainRes.json();
+                setExplanationData(explainResult.raw);
+                // Explanation doesn't usually return an executionLog of background stuff, but if it did:
+                if (explainResult.executionLog) logServerQueries(explainResult.executionLog);
+
+                if (!isExplanationCollapsed) {
+                    // Already open
+                } else {
+                    setIsExplanationCollapsed(false);
+                }
+            } else {
+                console.warn("Explanation failed", await explainRes.text());
+                setError("Explanation failed: " + await explainRes.text());
+            }
+        } catch (explainErr) {
+            console.warn("Explanation execution error", explainErr);
+            setError("Explanation error: " + explainErr.message);
+        } finally {
+            setIsExplaining(false);
         }
     };
 
@@ -1111,11 +1205,11 @@ export default function Home() {
 
                                 {!isResultsCollapsed && (
                                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                        <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '0.25rem', cursor: 'pointer', marginRight: '0.5rem' }} title="Show internal queries executed in background">
+                                        <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '0.25rem', cursor: 'pointer', marginRight: '0.5rem' }} title="Enable and show background queries (Reference & Auto-Connect)">
                                             <input
                                                 type="checkbox"
                                                 checked={showBackgroundQueries}
-                                                onChange={(e) => setShowBackgroundQueries(e.target.checked)}
+                                                onChange={handleBackgroundQueriesChange}
                                                 onClick={(e) => e.stopPropagation()}
                                                 style={{ cursor: 'pointer' }}
                                             />
@@ -1217,6 +1311,26 @@ export default function Home() {
                                     {isExplanationCollapsed ? <ChevronUp size={14} color="#94a3b8" /> : <ChevronDown size={14} color="#94a3b8" />}
                                 </div>
 
+                                <button
+                                    className="btn"
+                                    onClick={handleRunExplanation}
+                                    disabled={!lastQuery || isExplaining}
+                                    title={!lastQuery ? "Run a query first" : "Run Explanation"}
+                                    style={{
+                                        padding: '2px 8px',
+                                        fontSize: '0.75rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        opacity: (!lastQuery || isExplaining) ? 0.5 : 1,
+                                        marginLeft: 'auto',
+                                        marginRight: '8px'
+                                    }}
+                                >
+                                    {isExplaining ? <Loader size={12} className="spin" /> : <Play size={12} fill="currentColor" />}
+                                    Run
+                                </button>
+
                                 {!isExplanationCollapsed && (
                                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                                         <button
@@ -1305,6 +1419,26 @@ export default function Home() {
                                     </h3>
                                     {isProfilingCollapsed ? <ChevronUp size={14} color="#94a3b8" /> : <ChevronDown size={14} color="#94a3b8" />}
                                 </div>
+
+                                <button
+                                    className="btn"
+                                    onClick={handleRunProfiling}
+                                    disabled={!lastQuery || isProfiling}
+                                    title={!lastQuery ? "Run a query first" : "Run Profiling"}
+                                    style={{
+                                        padding: '2px 8px',
+                                        fontSize: '0.75rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        opacity: (!lastQuery || isProfiling) ? 0.5 : 1,
+                                        marginLeft: 'auto',
+                                        marginRight: '8px'
+                                    }}
+                                >
+                                    {isProfiling ? <Loader size={12} className="spin" /> : <Play size={12} fill="currentColor" />}
+                                    Run
+                                </button>
 
                                 {!isProfilingCollapsed && (
                                     <div style={{ display: 'flex', gap: '0.5rem' }}>
