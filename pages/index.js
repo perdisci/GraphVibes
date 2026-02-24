@@ -211,7 +211,7 @@ export default function Home() {
         type: 'janus' // 'janus' or 'puppy'
 
     });
-    const [autoConnect, setAutoConnect] = useState(false);
+    const [autoConnect, setAutoConnect] = useState(true);
     const [enrich, setEnrich] = useState(false);
     const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'connected', 'connecting', 'disconnected'
 
