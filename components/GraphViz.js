@@ -374,6 +374,73 @@ const GraphViz = ({
         }
     };
 
+    const paintLinkLabel = (link, ctx, globalScale) => {
+        const label = link.label;
+        if (!label) return;
+
+        const start = link.source;
+        const end = link.target;
+        if (!start || !end || typeof start.x !== 'number' || typeof end.x !== 'number') return;
+
+        let textPos = { x: 0, y: 0 };
+        let angle = 0;
+
+        if (start.id === end.id) {
+            const loopScale = 40;
+            textPos.x = start.x;
+            textPos.y = start.y - loopScale * 0.75;
+        } else {
+            if (link.curvature) {
+                const mx = (start.x + end.x) / 2;
+                const my = (start.y + end.y) / 2;
+                const dx = end.x - start.x;
+                const dy = end.y - start.y;
+                textPos.x = mx + (-dy * link.curvature * 0.5);
+                textPos.y = my + (dx * link.curvature * 0.5);
+            } else {
+                textPos.x = (start.x + end.x) / 2;
+                textPos.y = (start.y + end.y) / 2;
+            }
+            angle = Math.atan2(end.y - start.y, end.x - start.x);
+            // Keep text upright
+            if (angle > Math.PI / 2 || angle < -Math.PI / 2) {
+                angle += Math.PI;
+            }
+        }
+
+        const fontSize = 10 / globalScale;
+        ctx.font = `${fontSize}px Sans-Serif`;
+        const textWidth = ctx.measureText(label).width;
+        const bckgDimensions = [textWidth, fontSize].map(n => n + fontSize * 0.4);
+
+        ctx.save();
+        ctx.translate(textPos.x, textPos.y);
+        ctx.rotate(angle);
+
+        const isDark = backgroundColor === '#0f111a' || backgroundColor === '#020617';
+        ctx.fillStyle = isDark ? 'rgba(15, 17, 26, 0.85)' : 'rgba(255, 255, 255, 0.85)';
+
+        ctx.beginPath();
+        const w = bckgDimensions[0];
+        const h = bckgDimensions[1];
+        const r = 2;
+        const x = -w / 2;
+        const y = -h / 2;
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = getLinkColor(link);
+        ctx.fillText(label, 0, 0);
+        ctx.restore();
+    };
+
     // Link Painting Logic for PDF to match Screen Default
     const pdfPaintLink = (link, ctx, globalScale) => {
         const NODE_R = 6;
@@ -464,6 +531,66 @@ const GraphViz = ({
         ctx.closePath();
         ctx.fill();
         ctx.restore();
+
+        // --- Arrow Drawing --- (already done above)
+        // Draw label for PDF
+        const label = link.label;
+        if (label) {
+            let textPos = { x: 0, y: 0 };
+            let angle = 0;
+            if (src.id === tgt.id) {
+                const loopScale = 40;
+                textPos.x = src.x;
+                textPos.y = src.y - loopScale * 0.75;
+            } else {
+                if (link.curvature) {
+                    const mx = (src.x + tgt.x) / 2;
+                    const my = (src.y + tgt.y) / 2;
+                    const dx = tgt.x - src.x;
+                    const dy = tgt.y - src.y;
+                    textPos.x = mx + (-dy * link.curvature * 0.5);
+                    textPos.y = my + (dx * link.curvature * 0.5);
+                } else {
+                    textPos.x = (src.x + tgt.x) / 2;
+                    textPos.y = (src.y + tgt.y) / 2;
+                }
+                angle = Math.atan2(tgt.y - src.y, tgt.x - src.x);
+                if (angle > Math.PI / 2 || angle < -Math.PI / 2) {
+                    angle += Math.PI;
+                }
+            }
+
+            const fontSize = 10 / globalScale;
+            ctx.font = `${fontSize}px Sans-Serif`;
+            const textWidth = ctx.measureText(label).width;
+            const bckgDimensions = [textWidth, fontSize].map(n => n + fontSize * 0.4);
+
+            ctx.save();
+            ctx.translate(textPos.x, textPos.y);
+            ctx.rotate(angle);
+            // PDF is forced white background
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+
+            ctx.beginPath();
+            const w = bckgDimensions[0];
+            const h = bckgDimensions[1];
+            const r = 2;
+            const xt = -w / 2;
+            const yt = -h / 2;
+            ctx.moveTo(xt + r, yt);
+            ctx.arcTo(xt + w, yt, xt + w, yt + h, r);
+            ctx.arcTo(xt + w, yt + h, xt, yt + h, r);
+            ctx.arcTo(xt, yt + h, xt, yt, r);
+            ctx.arcTo(xt, yt, xt + w, yt, r);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = color;
+            ctx.fillText(label, 0, 0);
+            ctx.restore();
+        }
     };
 
     const handleDownloadPdf = () => {
@@ -622,6 +749,8 @@ const GraphViz = ({
                 }}
                 linkWidth={2}
                 linkHoverPrecision={4}
+                linkCanvasObjectMode={() => 'after'}
+                linkCanvasObject={paintLinkLabel}
                 dagMode={effectiveDagMode}
                 dagLevelDistance={50}
             />}
