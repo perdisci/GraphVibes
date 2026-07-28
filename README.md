@@ -132,6 +132,14 @@ To test Graph.Vibes, you can run a local generic JanusGraph instance and load th
     -   Click **Run Query** (or Press `Ctrl/Cmd + Enter`).
     -   Explore the graph!
 
+## 🧪 Development
+
+-   **Lint**: `npm run lint` (Next.js ESLint config).
+-   **Unit tests**: `npm test` runs a small Jest suite covering the pure
+    parsing/formatting/validation helpers in `utils/`. There is no
+    browser/UI test suite — verify UI changes manually against a running
+    Gremlin server.
+
 ## 🎮 Interaction Guide
 
 -   **Search Nodes**: Use the **Search Box** (top-right) to find nodes by ID or label. Press `Enter` to auto-center and zoom on the result.

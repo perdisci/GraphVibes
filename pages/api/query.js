@@ -1,35 +1,5 @@
-import { connect } from '../../lib/gremlinClient';
-
-// Helper to serialize Gremlin results roughly to JSON
-// Helper to serialize Gremlin results roughly to JSON
-const formatResult = (item) => {
-    if (item === null || item === undefined) return item;
-    if (typeof item === 'bigint') return Number(item);
-
-    if (item instanceof Map) {
-        const obj = {};
-        for (const [key, value] of item.entries()) {
-            obj[String(key)] = formatResult(value);
-        }
-        return obj;
-    }
-
-    if (Array.isArray(item)) {
-        return item.map(formatResult);
-    }
-
-    if (typeof item === 'object') {
-        const obj = {};
-        for (const key in item) {
-            if (Object.prototype.hasOwnProperty.call(item, key)) {
-                obj[key] = formatResult(item[key]);
-            }
-        }
-        return obj;
-    }
-
-    return item;
-};
+import { getId, getSafeKey, formatResult } from '../../utils/gremlinIds';
+import { validateConnectionTarget } from '../../utils/validateConnection';
 
 export default async function handler(req, res) {
     if (req.method !== 'POST') {
@@ -40,6 +10,11 @@ export default async function handler(req, res) {
 
     if (!query) {
         return res.status(400).json({ error: 'Query is required' });
+    }
+
+    const validation = validateConnectionTarget(host, port);
+    if (!validation.valid) {
+        return res.status(400).json({ error: validation.error });
     }
 
     const wsUrl = `ws://${host}:${port}/gremlin`;
@@ -88,21 +63,6 @@ export default async function handler(req, res) {
                 else if (propRes && propRes._items) items = propRes._items;
 
                 let foundProps = {};
-
-                // Helper for deterministic key matching
-                const getSafeKey = (id) => {
-                    if (id && typeof id === 'object') {
-                        const keys = Object.keys(id).sort();
-                        if (keys.length === 0 && typeof id.toString === 'function') {
-                            const s = id.toString();
-                            if (s !== '[object Object]') return s;
-                        }
-                        const sorted = {};
-                        keys.forEach(k => sorted[k] = id[k]);
-                        return JSON.stringify(sorted);
-                    }
-                    return id;
-                };
 
                 const targetKey = getSafeKey(edgeId);
                 const targetStr = String(edgeId);
@@ -188,30 +148,6 @@ export default async function handler(req, res) {
             result: items.map(i => formatResult(i))
         });
 
-        // Helper to extract ID safely
-        const getId = (obj) => {
-            if (obj && typeof obj === 'object' && obj.id) return obj.id;
-            return obj;
-        };
-
-        // Helper for consistent Map keys - robust & deterministic
-        const getSafeKey = (id) => {
-            if (id && typeof id === 'object') {
-                // Sort keys to ensure deterministic string
-                const keys = Object.keys(id).sort();
-                if (keys.length === 0 && typeof id.toString === 'function') {
-                    // Handle Longs or custom classes with no enumerable props but valid toString
-                    const s = id.toString();
-                    if (s !== '[object Object]') return s;
-                }
-                const sorted = {};
-                keys.forEach(k => sorted[k] = id[k]);
-                return JSON.stringify(sorted);
-            }
-            return id;
-        };
-
-        // Process initial results
         // Process initial results
         items.forEach(item => {
             if (item && item.id && item.label && item.inV && item.outV) {

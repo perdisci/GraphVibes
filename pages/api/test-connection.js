@@ -1,4 +1,4 @@
-import { connect } from '../../lib/gremlinClient';
+import { validateConnectionTarget } from '../../utils/validateConnection';
 
 export default async function handler(req, res) {
     if (req.method !== 'POST') {
@@ -6,6 +6,12 @@ export default async function handler(req, res) {
     }
 
     const { host = 'localhost', port = '8182' } = req.body;
+
+    const validation = validateConnectionTarget(host, port);
+    if (!validation.valid) {
+        return res.status(400).json({ status: 'error', error: validation.error });
+    }
+
     const wsUrl = `ws://${host}:${port}/gremlin`;
 
     try {

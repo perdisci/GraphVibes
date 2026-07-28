@@ -3,6 +3,13 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { Play, Activity, Database, Layers, Banana, Copy, ExternalLink, Check, ZoomIn, ZoomOut, Maximize2, Minimize2, Settings, Focus, X, Link, AlertCircle, Loader, Palette, Info, ChevronUp, ChevronDown, GripHorizontal, Timer, BookOpen, Search, Trash2, Square } from 'lucide-react';
 import { GRAPH_PALETTES } from '../utils/palettes';
+import { formatProfileData, formatExplainData } from '../utils/graphsonFormatting';
+import { THEME_CONFIG } from '../utils/themes';
+import AboutModal from '../components/modals/AboutModal';
+import WarningModal from '../components/modals/WarningModal';
+import ThemeModal from '../components/modals/ThemeModal';
+import ConnectionModal from '../components/modals/ConnectionModal';
+import GraphSettingsModal from '../components/modals/GraphSettingsModal';
 
 const GraphViz = dynamic(() => import('../components/GraphViz'), {
     ssr: false
@@ -11,132 +18,6 @@ const GraphViz = dynamic(() => import('../components/GraphViz'), {
 const Editor = dynamic(() => import('@monaco-editor/react'), {
     ssr: false
 });
-
-const parseGraphSON = (item) => {
-    if (item === null || item === undefined) return item;
-
-    if (Array.isArray(item)) {
-        return item.map(parseGraphSON);
-    }
-
-    if (typeof item === 'object') {
-        if (item['@value'] !== undefined) {
-            const type = item['@type'];
-            const value = item['@value'];
-
-            if (type === 'g:Map') {
-                const map = {};
-                if (Array.isArray(value)) {
-                    for (let i = 0; i < value.length; i += 2) {
-                        const k = parseGraphSON(value[i]);
-                        const v = parseGraphSON(value[i + 1]);
-                        map[k] = v;
-                    }
-                }
-                return map;
-            }
-            if (type === 'g:List' || type === 'g:Set') {
-                return parseGraphSON(value);
-            }
-            // For other types like g:Int64, g:Double, g:Metrics, etc., just unwrap/recurse
-            return parseGraphSON(value);
-        }
-
-        // Regular object, recurse keys
-        const newObj = {};
-        for (const k in item) {
-            newObj[k] = parseGraphSON(item[k]);
-        }
-        return newObj;
-    }
-
-    return item;
-};
-
-const formatProfileData = (rawData) => {
-    // 1. Parse GraphSON if present
-    const parsed = parseGraphSON(rawData);
-
-    // 2. Extract profile object (usually in an array)
-    let profileObj = parsed;
-    if (Array.isArray(parsed) && parsed.length > 0) {
-        profileObj = parsed[0];
-    }
-
-    if (!profileObj || !profileObj.metrics) return JSON.stringify(parsed, null, 2);
-
-    const metrics = profileObj.metrics;
-    let output = '';
-
-    // Header
-    output += 'Dur: ' + (profileObj.dur ? profileObj.dur.toFixed(4) : 'N/A') + ' ms\n\n';
-
-    // Columns
-    const pad = (str, len, char = ' ') => (str + '').padEnd(len, char);
-    const padL = (str, len, char = ' ') => (str + '').padStart(len, char);
-
-    output += pad('Step', 50) + padL('Count', 12) + padL('Traversers', 12) + padL('Time (ms)', 15) + padL('% Dur', 10) + '\n';
-    output += pad('', 50 + 12 + 12 + 15 + 10, '=') + '\n';
-
-    const printMetric = (metric, indent = 0) => {
-        const name = (metric.name || 'Unknown').substring(0, 48 - indent);
-        const count = metric.counts ? (metric.counts.elementCount || metric.counts.traverserCount || 0) : 0;
-        const traversers = metric.counts ? (metric.counts.traverserCount || 0) : 0;
-        const dur = metric.dur || 0;
-        const perc = metric.percDur || 0;
-        const indentStr = ' '.repeat(indent);
-
-        output += pad(indentStr + name, 50) + padL(count, 12) + padL(traversers, 12) + padL(dur.toFixed(3), 15) + padL(perc.toFixed(2), 10) + '\n';
-
-        if (metric.annotations) {
-            Object.entries(metric.annotations).forEach(([key, val]) => {
-                output += '    ' + indentStr + key + ': ' + val + '\n';
-            });
-        }
-
-        if (metric.metrics && Array.isArray(metric.metrics)) {
-            metric.metrics.forEach(m => printMetric(m, indent + 2));
-        }
-    };
-
-    metrics.forEach(m => printMetric(m));
-
-    return output;
-};
-
-
-
-const formatExplainData = (rawData) => {
-    // 1. Parse GraphSON if present
-    const parsed = parseGraphSON(rawData);
-
-    // 2. Extract explanation object (usually in an array)
-    let explainObj = parsed;
-    if (Array.isArray(parsed) && parsed.length > 0) {
-        explainObj = parsed[0];
-    }
-
-    // Fallback if not standard structure
-    if (!explainObj) return JSON.stringify(parsed, null, 2);
-
-    // Try to format nicely if it has expected fields
-    let output = '';
-
-    if (explainObj.original) {
-        output += 'Original Traversal\n' + '=============================================================================================================\n';
-        // original might be array or string
-        const orig = Array.isArray(explainObj.original) ? explainObj.original.join('\n') : explainObj.original;
-        output += (orig || '') + '\n\n';
-    }
-
-    if (explainObj.final) {
-        output += 'Final Traversal\n' + '=============================================================================================================\n';
-        const final = Array.isArray(explainObj.final) ? explainObj.final.join('\n') : explainObj.final;
-        output += (final || '') + '\n\n';
-    }
-
-    return output || JSON.stringify(explainObj, null, 2);
-};
 
 const logServerQueries = (logs) => {
     if (!logs || !Array.isArray(logs)) return;
@@ -219,10 +100,9 @@ export default function Home() {
     const [theme, setTheme] = useState('light');
     const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
 
-    const THEME_CONFIG = {
-        dark: { background: '#0f111a', label: 'Dark Mode' },
-        light: { background: '#ffffff', label: 'Light Mode' },
-        midnight: { background: '#020617', label: 'Midnight' }
+    const handleSelectTheme = (key) => {
+        setTheme(key);
+        setIsThemeModalOpen(false);
     };
 
     // Apply theme
@@ -1698,312 +1578,40 @@ export default function Home() {
                 </div>
             </main>
 
-            {isSettingsOpen && (
-                <div className="modal-overlay" onClick={() => setIsSettingsOpen(false)}>
-                    <div className="modal" onClick={e => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <h3 className="modal-title">Graph Settings</h3>
-                            <button className="control-btn" onClick={() => setIsSettingsOpen(false)}>
-                                <X size={20} />
-                            </button>
-                        </div>
+            <GraphSettingsModal
+                isOpen={isSettingsOpen}
+                onClose={() => setIsSettingsOpen(false)}
+                graphSettings={graphSettings}
+                onChangeSettings={setGraphSettings}
+                palettes={GRAPH_PALETTES}
+            />
 
-                        <div className="form-group">
-                            <label className="form-label">Background Color</label>
-                            <input
-                                type="text"
-                                className="form-input"
-                                value={graphSettings.backgroundColor}
-                                onChange={e => setGraphSettings({ ...graphSettings, backgroundColor: e.target.value })}
-                                placeholder="#0f111a"
-                            />
-                        </div>
+            <ConnectionModal
+                isOpen={isConnectionModalOpen}
+                onClose={() => setIsConnectionModalOpen(false)}
+                connectionSettings={connectionSettings}
+                onChangeSettings={setConnectionSettings}
+                onConnect={handleConnect}
+            />
 
-                        <div className="form-group">
-                            <label className="form-label">Neighbor Expansion Limit (on node double click)</label>
-                            <input
-                                type="number"
-                                className="form-input"
-                                value={graphSettings.expansionLimit}
-                                onChange={e => setGraphSettings({ ...graphSettings, expansionLimit: parseInt(e.target.value) || 50 })}
-                                min="1"
-                                max="500"
-                            />
-                        </div>
+            <ThemeModal
+                isOpen={isThemeModalOpen}
+                onClose={() => setIsThemeModalOpen(false)}
+                theme={theme}
+                onSelectTheme={handleSelectTheme}
+            />
 
-                        <div className="form-group">
-                            <label className="form-label">Node Color Theme</label>
-                            <select
-                                className="form-input"
-                                value={graphSettings.activeNodePalette}
-                                onChange={e => setGraphSettings({ ...graphSettings, activeNodePalette: e.target.value })}
-                                style={{ cursor: 'pointer' }}
-                            >
-                                {Object.entries(GRAPH_PALETTES).map(([key, palette]) => (
-                                    <option key={key} value={key}>
-                                        {palette.label}
-                                    </option>
-                                ))}
-                            </select>
-                            <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginTop: '0.25rem', display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                                {/* Preview dots */}
-                                {GRAPH_PALETTES[graphSettings.activeNodePalette]?.colors.slice(0, 8).map(c => (
-                                    <div key={c} style={{ width: '8px', height: '8px', borderRadius: '50%', background: c }} />
-                                ))}
-                            </div>
-                        </div>
+            <AboutModal
+                isOpen={isAboutModalOpen}
+                onClose={() => setIsAboutModalOpen(false)}
+                theme={theme}
+            />
 
-                        <div className="form-group">
-                            <label className="form-label">Edge Color Theme</label>
-                            <select
-                                className="form-input"
-                                value={graphSettings.activeEdgePalette}
-                                onChange={e => setGraphSettings({ ...graphSettings, activeEdgePalette: e.target.value })}
-                                style={{ cursor: 'pointer' }}
-                            >
-                                {Object.entries(GRAPH_PALETTES).map(([key, palette]) => (
-                                    <option key={key} value={key}>
-                                        {palette.label}
-                                    </option>
-                                ))}
-                            </select>
-                            <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginTop: '0.25rem', display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                                {/* Preview dots */}
-                                {GRAPH_PALETTES[graphSettings.activeEdgePalette]?.colors.slice(0, 8).map(c => (
-                                    <div key={c} style={{ width: '8px', height: '8px', borderRadius: '50%', background: c }} />
-                                ))}
-                            </div>
-                        </div>
-
-
-
-                        <div className="form-group">
-                            <label className="form-label">Node Label Style</label>
-                            <select
-                                className="form-input"
-                                value={graphSettings.labelStyle || 'standard'}
-                                onChange={e => setGraphSettings({ ...graphSettings, labelStyle: e.target.value })}
-                                style={{ cursor: 'pointer' }}
-                            >
-                                <option value="standard">Standard (Outline)</option>
-                                <option value="inverted">Inverted (Dark Text)</option>
-                                <option value="paper">Paper (White Box)</option>
-                                <option value="glass">Glass (Dark Box)</option>
-                            </select>
-                        </div>
-
-                        <div className="form-group">
-                            <label className="form-label">Graph Layout</label>
-                            <select
-                                className="form-input"
-                                value={graphSettings.layoutMode || ''}
-                                onChange={e => setGraphSettings({ ...graphSettings, layoutMode: e.target.value || null })}
-                                style={{ cursor: 'pointer' }}
-                            >
-                                <option value="">Force Directed (Standard)</option>
-                                <option value="td">Tree (Top-Down)</option>
-                                <option value="bu">Tree (Bottom-Up)</option>
-                                <option value="lr">Tree (Left-Right)</option>
-                                <option value="rl">Tree (Right-Left)</option>
-                                <option value="radialout">Radial (Outwards)</option>
-                                <option value="radialin">Radial (Inwards)</option>
-                                <option value="circular">Circular</option>
-                                <option value="community">Community</option>
-                            </select>
-                        </div>
-                    </div>
-                </div >
-            )
-            }
-
-            {
-                isConnectionModalOpen && (
-                    <div className="modal-overlay" onClick={() => setIsConnectionModalOpen(false)}>
-                        <div className="modal" onClick={e => e.stopPropagation()}>
-                            <div className="modal-header">
-                                <h3 className="modal-title">Connection Settings</h3>
-                                <button className="control-btn" onClick={() => setIsConnectionModalOpen(false)}>
-                                    <X size={20} />
-                                </button>
-                            </div>
-
-                            <div className="form-group">
-                                <label className="form-label">Gremlin Server Host</label>
-                                <input
-                                    type="text"
-                                    className="form-input"
-                                    value={connectionSettings.host}
-                                    onChange={e => setConnectionSettings({ ...connectionSettings, host: e.target.value })}
-                                    placeholder="localhost"
-                                />
-                            </div>
-
-                            <div className="form-group">
-                                <label className="form-label">Port</label>
-                                <input
-                                    type="text"
-                                    className="form-input"
-                                    value={connectionSettings.port}
-                                    onChange={e => setConnectionSettings({ ...connectionSettings, port: e.target.value })}
-                                    placeholder="8182"
-                                />
-                            </div>
-
-                            <div className="form-group">
-                                <label className="form-label">Database Type</label>
-                                <select
-                                    className="form-input"
-                                    value={connectionSettings.type || 'janus'}
-                                    onChange={e => setConnectionSettings({ ...connectionSettings, type: e.target.value })}
-                                    style={{ cursor: 'pointer' }}
-                                >
-                                    <option value="janus">JanusGraph (Default)</option>
-                                    <option value="puppy">Puppy Graph</option>
-                                </select>
-                            </div>
-
-                            <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
-                                <button
-                                    onClick={handleConnect}
-                                    style={{
-                                        background: '#7c3aed',
-                                        color: 'white',
-                                        border: 'none',
-                                        padding: '0.5rem 1rem',
-                                        borderRadius: '4px',
-                                        cursor: 'pointer',
-                                        fontWeight: '500'
-                                    }}
-                                >
-                                    Save & Connect
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )
-            }
-
-            {
-                isThemeModalOpen && (
-                    <div className="modal-overlay" onClick={() => setIsThemeModalOpen(false)}>
-                        <div className="modal" onClick={e => e.stopPropagation()} style={{ width: '300px' }}>
-                            <div className="modal-header">
-                                <h3 className="modal-title">Select Theme</h3>
-                                <button className="control-btn" onClick={() => setIsThemeModalOpen(false)}>
-                                    <X size={20} />
-                                </button>
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                {Object.entries(THEME_CONFIG).map(([key, config]) => (
-                                    <button
-                                        key={key}
-                                        onClick={() => { setTheme(key); setIsThemeModalOpen(false); }}
-                                        style={{
-                                            padding: '1rem',
-                                            background: theme === key ? 'var(--primary)' : 'var(--surface-hover)',
-                                            border: '1px solid var(--border)',
-                                            borderRadius: '6px',
-                                            color: theme === key ? 'white' : 'var(--text-main)',
-                                            cursor: 'pointer',
-                                            textAlign: 'left',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '0.5rem'
-                                        }}
-                                    >
-                                        <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: config.background, border: '1px solid #666' }}></div>
-                                        {config.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                )
-            }
-
-            {
-                isAboutModalOpen && (
-                    <div className="modal-overlay" onClick={() => setIsAboutModalOpen(false)}>
-                        <div className="modal" onClick={e => e.stopPropagation()} style={{ width: '400px' }}>
-                            <div className="modal-header">
-                                <h3 className="modal-title">About Graph.Vibes</h3>
-                                <button className="control-btn" onClick={() => setIsAboutModalOpen(false)}>
-                                    <X size={20} />
-                                </button>
-                            </div>
-                            <div style={{ padding: '1rem', color: 'var(--text-main)' }}>
-                                <div style={{ marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-                                    <img
-                                        src={theme === 'light' ? '/GraphVibes-Logo-Light.png' : '/GraphVibes-Logo-Dark.png'}
-                                        alt="Graph.Vibes"
-                                        style={{ height: '64px', borderRadius: '8px' }}
-                                    />
-                                    <h2 style={{ margin: 0, fontSize: '1.25rem' }}>Graph.Vibes</h2>
-                                    <p style={{ margin: 0, opacity: 0.7, fontSize: '0.9rem' }}>Graph Visualizer</p>
-                                </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '0.75rem 1.5rem', fontSize: '0.9rem' }}>
-                                    <div style={{ fontWeight: 600, opacity: 0.7 }}>Version</div>
-                                    <div>0.2.5</div>
-                                    <div style={{ fontWeight: 600, opacity: 0.7 }}>Author</div>
-                                    <div>Roberto Perdisci</div>
-                                    <div style={{ fontWeight: 600, opacity: 0.7 }}>AI Coding Agent</div>
-                                    <div>Gemini 3 Pro + Antigravity</div>
-                                    <div style={{ fontWeight: 600, opacity: 0.7 }}>Stack</div>
-                                    <div>
-                                        Next.js (12.3.4) • React (17.0.2)<br />
-                                        Gremlin (3.5.6) • ForceGraph (^1.29.0)<br />
-                                        Monaco Editor (^4.7.0) • Lucide Icons (^0.294.0)
-                                    </div>
-                                    <div style={{ fontWeight: 600, opacity: 0.7 }}>License</div>
-                                    <div>MIT</div>
-                                </div>
-                                <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)', textAlign: 'center', fontSize: '0.8rem', opacity: 0.5 }}>
-                                    &copy; 2025 Graph.Vibes Project
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )
-            }
-            {
-                isWarningModalOpen && (
-                    <div className="modal-overlay" onClick={() => setIsWarningModalOpen(false)}>
-                        <div className="modal" onClick={e => e.stopPropagation()} style={{ width: '450px', borderLeft: '4px solid #f59e0b' }}>
-                            <div className="modal-header">
-                                <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#f59e0b' }}>
-                                    <AlertCircle size={20} /> Data Integrity Warning
-                                </h3>
-                                <button className="control-btn" onClick={() => setIsWarningModalOpen(false)}>
-                                    <X size={20} />
-                                </button>
-                            </div>
-                            <div style={{ padding: '1rem', color: 'var(--text-main)', whiteSpace: 'pre-wrap' }}>
-                                <p style={{ marginTop: 0 }}>Some edges could not be visualized because they reference nodes that do not exist in the current result set.</p>
-                                <div style={{
-                                    background: 'var(--bg-secondary)',
-                                    padding: '0.75rem',
-                                    borderRadius: '6px',
-                                    fontFamily: 'monospace',
-                                    fontSize: '0.85rem',
-                                    maxHeight: '150px',
-                                    overflowY: 'auto'
-                                }}>
-                                    {warningMessage}
-                                </div>
-                                <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
-                                    <button
-                                        className="btn"
-                                        onClick={() => setIsWarningModalOpen(false)}
-                                        style={{ background: 'var(--bg-secondary)', color: 'var(--text-main)', border: '1px solid var(--border)' }}
-                                    >
-                                        Dismiss
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )
-            }
+            <WarningModal
+                isOpen={isWarningModalOpen}
+                onClose={() => setIsWarningModalOpen(false)}
+                message={warningMessage}
+            />
         </div >
     );
 }
