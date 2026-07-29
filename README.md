@@ -179,7 +179,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 Click the **Settings** icon (gear symbol) next to the assistant box to customize the system prompt or provide a description of your graph schema. If no schema is provided, the first time you translate a query the assistant will try to auto-populate the schema box for you by running JanusGraph's `graph.openManagement().printSchema()` in the background (this only works against JanusGraph — it's skipped for other backends). If that isn't available, it falls back to inferring a lightweight schema from a small sample of your graph's vertices/edges on each request instead, without writing anything into the schema box. Query descriptions (and the schema, if set) are sent to Anthropic's Claude API.
 
-The system prompt and schema are saved server-side to a `.agent-settings.json` file in the project root (gitignored) so they persist across page reloads and server restarts — they aren't just kept in the browser tab.
+Any changes you make (system prompt edits, the auto-inferred schema) are saved server-side to `.agent-settings.local.json` in the project root (gitignored) so they persist across page reloads and server restarts, instead of only living in the browser tab. The committed `.agent-settings.json` is a separate, untouched defaults file — it's what a fresh instance of Graph.Vibes starts from; edit it directly if you want to change the out-of-the-box default system prompt.
 
 ## 🤝 Contributing
 

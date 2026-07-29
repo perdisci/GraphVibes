@@ -1,4 +1,4 @@
 .next
 node_modules
 .env.local
-.agent-settings.json
+.agent-settings.local.json

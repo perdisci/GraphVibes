@@ -79,13 +79,21 @@ details. `pages/index.js` is still a large, dense file; see Architecture below.
   parameter (never the per-request user message), so they're resent on every
   translation. The `ANTHROPIC_API_KEY` secret lives server-side only — never
   send it to the client, and don't add a UI field for it. `agentSettings`
-  (system prompt + schema) is persisted server-side to `.agent-settings.json`
-  (project root, gitignored) via [pages/api/agent-settings.js](pages/api/agent-settings.js)
-  and [utils/agentSettingsStore.js](utils/agentSettingsStore.js) — `pages/index.js`
-  loads it on mount and writes through `updateAgentSettings(...)` (used instead
-  of the raw `setAgentSettings` setter everywhere the operator or the
-  auto-inferred schema changes it), so settings survive page reloads and
-  server restarts instead of living only in React state.
+  persistence, handled by [utils/agentSettingsStore.js](utils/agentSettingsStore.js)
+  via [pages/api/agent-settings.js](pages/api/agent-settings.js), is split
+  across two files so operator edits never clobber the shipped defaults:
+  `.agent-settings.json` (project root, committed) holds only the
+  `DEFAULT_SYSTEM_PROMPT` seed — `readAgentSettings()` writes it once with
+  the default if it's ever missing, but the app never overwrites it
+  afterward — while `.agent-settings.local.json` (gitignored) holds whatever
+  the operator has actually changed (system prompt edits, the auto-inferred
+  schema). `readAgentSettings()` reads the local file if present and falls
+  back to the defaults file when it isn't; `writeAgentSettings()` only ever
+  writes the local file. `pages/index.js` loads settings on mount and writes
+  through `updateAgentSettings(...)` (used instead of the raw
+  `setAgentSettings` setter everywhere the operator or the auto-inferred
+  schema changes it), so settings survive page reloads and server restarts
+  instead of living only in React state.
 - [pages/api/query.js](pages/api/query.js) — the main backend endpoint. Per
   request it opens one or more short-lived `gremlin.driver.Client` connections
   directly (there is no shared/pooled connection), runs the user's raw query,
