@@ -1,15 +1,17 @@
 import Head from 'next/head';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Play, Activity, Database, Layers, Banana, Copy, ExternalLink, Check, ZoomIn, ZoomOut, Maximize2, Minimize2, Settings, Focus, X, Link, AlertCircle, Loader, Palette, Info, ChevronUp, ChevronDown, GripHorizontal, Timer, BookOpen, Search, Trash2, Square } from 'lucide-react';
+import { Play, Activity, Database, Layers, Banana, Copy, ExternalLink, Check, ZoomIn, ZoomOut, Maximize2, Minimize2, Settings, Focus, X, Link, AlertCircle, Loader, Palette, Info, ChevronUp, ChevronDown, GripHorizontal, Timer, BookOpen, Search, Trash2, Square, Sparkles } from 'lucide-react';
 import { GRAPH_PALETTES } from '../utils/palettes';
 import { formatProfileData, formatExplainData } from '../utils/graphsonFormatting';
 import { THEME_CONFIG } from '../utils/themes';
+import { DEFAULT_SYSTEM_PROMPT } from '../utils/gremlinAgentDefaults';
 import AboutModal from '../components/modals/AboutModal';
 import WarningModal from '../components/modals/WarningModal';
 import ThemeModal from '../components/modals/ThemeModal';
 import ConnectionModal from '../components/modals/ConnectionModal';
 import GraphSettingsModal from '../components/modals/GraphSettingsModal';
+import AgentSettingsModal from '../components/modals/AgentSettingsModal';
 
 const GraphViz = dynamic(() => import('../components/GraphViz'), {
     ssr: false
@@ -42,6 +44,35 @@ export default function Home() {
     const [queryDuration, setQueryDuration] = useState(null);
     const [error, setError] = useState(null);
 
+    // AI Query Assistant
+    const [nlDescription, setNlDescription] = useState('');
+    const [isTranslating, setIsTranslating] = useState(false);
+    const [translateError, setTranslateError] = useState(null);
+    const [isAgentSettingsOpen, setIsAgentSettingsOpen] = useState(false);
+    const [agentSettings, setAgentSettings] = useState({
+        systemPrompt: DEFAULT_SYSTEM_PROMPT,
+        schema: ''
+    });
+
+    // Load persisted Agent Settings (system prompt + schema) from the server on mount.
+    useEffect(() => {
+        fetch('/api/agent-settings')
+            .then(res => res.json())
+            .then(setAgentSettings)
+            .catch(err => console.warn('Failed to load saved agent settings:', err.message));
+    }, []);
+
+    // Updates Agent Settings state and persists them to the server so they
+    // survive page reloads, rather than only living in memory.
+    const updateAgentSettings = (newSettings) => {
+        setAgentSettings(newSettings);
+        fetch('/api/agent-settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newSettings),
+        }).catch(err => console.warn('Failed to persist agent settings:', err.message));
+    };
+
     // Profiling State
     const [lastQuery, setLastQuery] = useState(null);
     const [isProfiling, setIsProfiling] = useState(false);
@@ -64,7 +95,7 @@ export default function Home() {
     const [copiedProperty, setCopiedProperty] = useState(null);
 
     // UI State
-    const [sidebarWidth, setSidebarWidth] = useState(320);
+    const [sidebarWidth, setSidebarWidth] = useState(480);
     const [isResizing, setIsResizing] = useState(false);
     const [isMaximized, setIsMaximized] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -78,7 +109,7 @@ export default function Home() {
     // Sidebar UI State
     const [queryEditorHeight, setQueryEditorHeight] = useState(120);
     const [isResizingQuery, setIsResizingQuery] = useState(false);
-    const [isResultsCollapsed, setIsResultsCollapsed] = useState(false);
+    const [isResultsCollapsed, setIsResultsCollapsed] = useState(true);
     const [isProfilingCollapsed, setIsProfilingCollapsed] = useState(true);
     const [isExplanationCollapsed, setIsExplanationCollapsed] = useState(true);
 
@@ -422,6 +453,62 @@ export default function Home() {
             }
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleTranslateQuery = async () => {
+        if (!nlDescription.trim() || isTranslating) return;
+
+        setIsTranslating(true);
+        setTranslateError(null);
+
+        try {
+            let schema = agentSettings.schema;
+
+            if (!schema || !schema.trim()) {
+                try {
+                    const schemaRes = await fetch('/api/infer-schema', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            host: connectionSettings.host,
+                            port: connectionSettings.port
+                        }),
+                    });
+                    const schemaResult = await schemaRes.json();
+                    if (schemaRes.ok && schemaResult.schema) {
+                        schema = schemaResult.schema;
+                        updateAgentSettings({ ...agentSettings, schema });
+                    }
+                } catch (schemaErr) {
+                    console.warn('Automatic schema inference via printSchema() failed, proceeding without it:', schemaErr.message);
+                }
+            }
+
+            const res = await fetch('/api/nl-to-gremlin', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    description: nlDescription,
+                    systemPrompt: agentSettings.systemPrompt,
+                    schema,
+                    host: connectionSettings.host,
+                    port: connectionSettings.port,
+                    type: connectionSettings.type
+                }),
+            });
+
+            const result = await res.json();
+
+            if (!res.ok) {
+                throw new Error(result.error || 'Translation failed');
+            }
+
+            setQuery(result.gremlin);
+        } catch (err) {
+            setTranslateError(err.message);
+        } finally {
+            setIsTranslating(false);
         }
     };
 
@@ -1044,6 +1131,71 @@ export default function Home() {
                         )}
                     </div>
 
+                    {/* AI Query Assistant */}
+                    <div style={{
+                        marginBottom: '0.5rem',
+                        padding: '0.75rem',
+                        border: '1px solid var(--border)',
+                        borderRadius: '4px',
+                        background: 'var(--surface)'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                            <h3 style={{ margin: 0, fontSize: '0.9rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <Sparkles size={14} /> AI QUERY ASSISTANT
+                            </h3>
+                            <button
+                                className="control-btn"
+                                onClick={() => setIsAgentSettingsOpen(true)}
+                                title="Agent Settings"
+                                style={{ padding: '0.25rem' }}
+                            >
+                                <Settings size={14} />
+                            </button>
+                        </div>
+                        <textarea
+                            placeholder="Describe the query in plain English... (Ctrl/Cmd + Enter to translate)"
+                            value={nlDescription}
+                            onChange={(e) => setNlDescription(e.target.value)}
+                            onKeyDown={(e) => {
+                                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') handleTranslateQuery();
+                            }}
+                            rows={5}
+                            style={{
+                                width: '100%',
+                                padding: '0.5rem',
+                                borderRadius: '4px',
+                                border: '1px solid var(--border)',
+                                background: 'var(--bg-secondary)',
+                                color: 'var(--text-main)',
+                                fontSize: '0.85rem',
+                                fontFamily: 'inherit',
+                                resize: 'vertical',
+                                marginBottom: '0.5rem'
+                            }}
+                        />
+                        <button
+                            className="btn"
+                            onClick={handleTranslateQuery}
+                            disabled={isTranslating || !nlDescription.trim()}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '0.4rem',
+                                width: '100%',
+                                opacity: (isTranslating || !nlDescription.trim()) ? 0.6 : 1
+                            }}
+                        >
+                            {isTranslating ? <Loader size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                            Translate
+                        </button>
+                        {translateError && (
+                            <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: '#ef4444' }}>
+                                {translateError}
+                            </div>
+                        )}
+                    </div>
+
                     {/* Resize Handle */}
                     {!isResultsCollapsed && (
                         <div
@@ -1584,6 +1736,13 @@ export default function Home() {
                 graphSettings={graphSettings}
                 onChangeSettings={setGraphSettings}
                 palettes={GRAPH_PALETTES}
+            />
+
+            <AgentSettingsModal
+                isOpen={isAgentSettingsOpen}
+                onClose={() => setIsAgentSettingsOpen(false)}
+                settings={agentSettings}
+                onChangeSettings={updateAgentSettings}
             />
 
             <ConnectionModal

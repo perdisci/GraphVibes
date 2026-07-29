@@ -22,6 +22,8 @@ details. `pages/index.js` is still a large, dense file; see Architecture below.
 - `gremlin` 3.5.6 (official JS driver) for talking to the graph DB over WebSocket
 - `react-force-graph-2d` for the canvas/WebGL graph rendering
 - `@monaco-editor/react` for the Gremlin query editor
+- `@anthropic-ai/sdk` for the AI Query Assistant (natural language → Gremlin,
+  via the Claude API — see Architecture below)
 - `lucide-react` for icons, `jspdf` for PDF export of the graph
 - No CSS framework beyond `styles/globals.css`; theming is done via a
   `data-theme` attribute + CSS variables
@@ -47,8 +49,43 @@ details. `pages/index.js` is still a large, dense file; see Architecture below.
   layout modes (force, circular, community, tree/radial), legend, zoom
   controls, PDF export.
 - [components/modals/](components/modals/) — `GraphSettingsModal`,
-  `ConnectionModal`, `ThemeModal`, `AboutModal`, `WarningModal`. Pure
-  presentational components; state lives in `pages/index.js`.
+  `ConnectionModal`, `ThemeModal`, `AboutModal`, `WarningModal`,
+  `AgentSettingsModal`. Pure presentational components; state lives in
+  `pages/index.js`.
+- **AI Query Assistant** — a box under the Gremlin Query editor in
+  `pages/index.js` (state: `nlDescription`, `agentSettings`, handler
+  `handleTranslateQuery`) lets the operator describe a query in plain English;
+  it's translated by [pages/api/nl-to-gremlin.js](pages/api/nl-to-gremlin.js)
+  and the result is written into the query editor via `setQuery(...)` — it
+  never auto-executes. Before the first translation, if the operator hasn't
+  set a schema in `AgentSettingsModal`, `handleTranslateQuery` first calls
+  [pages/api/infer-schema.js](pages/api/infer-schema.js), which runs
+  JanusGraph's `graph.openManagement().printSchema()` management call and
+  returns its output; the result is written back into `agentSettings.schema`
+  so the schema box in the settings modal is populated for the operator to
+  review/edit, and is reused on every subsequent translation until they clear
+  it. That call is JanusGraph-specific (`openManagement()` doesn't exist on
+  PuppyGraph/plain TinkerPop) and treated as best-effort — if it fails,
+  `handleTranslateQuery` proceeds with an empty schema and
+  `pages/api/nl-to-gremlin.js` falls back to its own generic, backend-agnostic
+  introspection (vertex/edge labels + a handful of sample `valueMap(true)`
+  results, queried through the same `gremlin.driver.Client` pattern as
+  `pages/api/query.js`) — that fallback is request-scoped only and is never
+  written back into the UI. The route calls the Claude API (`claude-opus-5`,
+  via `@anthropic-ai/sdk`, credentials from `ANTHROPIC_API_KEY`) with a system
+  prompt built from [utils/gremlinAgentDefaults.js](utils/gremlinAgentDefaults.js)'s
+  `DEFAULT_SYSTEM_PROMPT` (overridable via `AgentSettingsModal`) plus whichever
+  schema ended up populated above — both go into the Claude API `system`
+  parameter (never the per-request user message), so they're resent on every
+  translation. The `ANTHROPIC_API_KEY` secret lives server-side only — never
+  send it to the client, and don't add a UI field for it. `agentSettings`
+  (system prompt + schema) is persisted server-side to `.agent-settings.json`
+  (project root, gitignored) via [pages/api/agent-settings.js](pages/api/agent-settings.js)
+  and [utils/agentSettingsStore.js](utils/agentSettingsStore.js) — `pages/index.js`
+  loads it on mount and writes through `updateAgentSettings(...)` (used instead
+  of the raw `setAgentSettings` setter everywhere the operator or the
+  auto-inferred schema changes it), so settings survive page reloads and
+  server restarts instead of living only in React state.
 - [pages/api/query.js](pages/api/query.js) — the main backend endpoint. Per
   request it opens one or more short-lived `gremlin.driver.Client` connections
   directly (there is no shared/pooled connection), runs the user's raw query,
@@ -79,8 +116,12 @@ details. `pages/index.js` is still a large, dense file; see Architecture below.
   profiling/explain panels. Extracted out of `pages/index.js` so they're unit
   testable without a browser.
 - [utils/validateConnection.js](utils/validateConnection.js) —
-  `validateConnectionTarget(host, port)`. Both API routes call this before
-  opening a Gremlin client; see the security note below.
+  `validateConnectionTarget(host, port)`. All three API routes call this
+  before opening a Gremlin client; see the security note below.
+- [utils/gremlinAgentDefaults.js](utils/gremlinAgentDefaults.js) —
+  `DEFAULT_SYSTEM_PROMPT` for the AI Query Assistant, shared between the
+  frontend (placeholder text in `AgentSettingsModal`) and the backend
+  (fallback when the operator hasn't overridden it).
 
 Host/port/query for every request come directly from the client's JSON body.
 `validateConnectionTarget` rejects malformed host/port input (whitespace,
@@ -92,6 +133,12 @@ who wants to lock this down when running somewhere more exposed than a trusted
 local machine can set `GREMLIN_ALLOWED_HOSTS` (comma-separated hostnames) to
 opt into an allowlist; it's unset (unrestricted) by default. Treat the app like
 a local DB client, not a public API surface, regardless.
+
+The AI Query Assistant sends the operator's natural-language description —
+and, if configured or auto-inferred, a summary of the graph schema/sample data
+— to Anthropic's Claude API. This is a third-party data flow distinct from the
+Gremlin connection above; it only fires when the operator explicitly uses the
+assistant, and only when `ANTHROPIC_API_KEY` is set.
 
 ## Running
 

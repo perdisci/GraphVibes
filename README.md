@@ -20,6 +20,7 @@ Graph.Vibes was built entirely with [Antigravity](https://antigravity.dev) and [
 
 -   **Interactive Visualization**: 2D force-directed graph with zoom, pan, and drag capabilities.
 -   **Gremlin Console**: Write and execute raw Gremlin scripts directly from the UI.
+-   **AI Query Assistant**: Describe a query in plain English and have it translated into Gremlin automatically (powered by Claude). Configurable system prompt and graph schema; falls back to inferring the schema from sample data when none is set. Requires an `ANTHROPIC_API_KEY` — see Configuration below.
 -   **Smart Expansion**: Double-click any node to fetch and reveal its hidden neighbors (with configurable limit).
 -   **Flexible Labeling**: Click any property in the details panel to instantly use it as the label for all nodes of that type.
 -   **Theming**: Includes Light (Default), Dark, and Midnight themes with a glassmorphism aesthetic.
@@ -167,6 +168,18 @@ Global settings can be accessed via the **Settings** icon (Tools symbol) in the 
     -   *Tree / Radial*: Hierarchical layouts (DAG Mode) for directed graphs.
 -   **Palettes**: Choose distinct color schemes for Nodes and Edges.
 -   **Expansion Limit**: Set the max number of neighbors to fetch on node double-click.
+
+### AI Query Assistant
+
+To use the **AI Query Assistant** (the box below the Gremlin Query editor), set an `ANTHROPIC_API_KEY` environment variable on the server running Graph.Vibes (e.g. in a `.env.local` file, or in your `docker-compose.yaml`/deployment environment):
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Click the **Settings** icon (gear symbol) next to the assistant box to customize the system prompt or provide a description of your graph schema. If no schema is provided, the first time you translate a query the assistant will try to auto-populate the schema box for you by running JanusGraph's `graph.openManagement().printSchema()` in the background (this only works against JanusGraph — it's skipped for other backends). If that isn't available, it falls back to inferring a lightweight schema from a small sample of your graph's vertices/edges on each request instead, without writing anything into the schema box. Query descriptions (and the schema, if set) are sent to Anthropic's Claude API.
+
+The system prompt and schema are saved server-side to a `.agent-settings.json` file in the project root (gitignored) so they persist across page reloads and server restarts — they aren't just kept in the browser tab.
 
 ## 🤝 Contributing
 
