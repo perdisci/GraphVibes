@@ -68,7 +68,7 @@ Using latest versions of core libraries:
     ```bash
     docker-compose up -d
     ```
-    The application will be available at `http://localhost:3000`.
+    The application will be available at `http://localhost:3300`.
 
 ## 🐉 Quick Start with JanusGraph
 
@@ -94,7 +94,7 @@ To test Graph.Vibes, you can run a local generic JanusGraph instance and load th
     Type `:exit` to leave the console when done.
 
 3.  **Connect Graph.Vibes**:
-    -   Open Graph.Vibes at `http://localhost:3000`.
+    -   Open Graph.Vibes at `http://localhost:3300`.
     -   Click the **Connection** icon.
     -   **Host**: `janusgraph` (Since both the Graph.Vibes and JanusGraph containers are on the `jgnet` Docker network).
     -   **Port**: `8182`.
