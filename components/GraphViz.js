@@ -3,6 +3,18 @@ import ForceGraph2D from 'react-force-graph-2d';
 import { ZoomIn, ZoomOut, Focus, Maximize2, Minimize2, Settings, RotateCcw, ChevronDown, ChevronUp, Download, Trash2 } from 'lucide-react';
 import { jsPDF } from "jspdf";
 
+// Safely extracts a string key for a node id or a link source/target, which
+// may be a raw id (number/string), a composite id object (e.g. PuppyGraph),
+// or a full node object once d3-force mutates link.source/target in place.
+const getSafeId = (item) => {
+    if (item === null || item === undefined) return "";
+    if (typeof item === 'object') {
+        if (item.id !== undefined) return getSafeId(item.id);
+        return JSON.stringify(item);
+    }
+    return String(item);
+};
+
 const GraphViz = ({
     data,
     onNodeClick,
@@ -26,6 +38,7 @@ const GraphViz = ({
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
     const [isLegendOpen, setIsLegendOpen] = useState(true);
     const [hiddenEdgeLabels, setHiddenEdgeLabels] = useState(new Set()); // New state
+    const [hiddenNodeLabels, setHiddenNodeLabels] = useState(new Set());
 
     // Custom Color Palette (Internal Default)
     const DEFAULT_PALETTE = [
@@ -193,18 +206,6 @@ const GraphViz = ({
 
         const linkMap = {};
 
-        // Helper to safely extract string ID
-        const getSafeId = (item) => {
-            if (item === null || item === undefined) return "";
-            if (typeof item === 'object') {
-                // If D3 already linked it, it might be a node object, so try .id
-                if (item.id !== undefined) return getSafeId(item.id);
-                // Otherwise it's likely a composite ID object
-                return JSON.stringify(item);
-            }
-            return String(item);
-        };
-
         // Group links by their source-target pair (order independent)
         data.links.forEach(link => {
             const srcId = getSafeId(link.source);
@@ -257,13 +258,22 @@ const GraphViz = ({
     // Filter Data based on Hidden Labels
     const filteredData = React.useMemo(() => {
         if (!data) return { nodes: [], links: [] };
-        if (hiddenEdgeLabels.size === 0) return data;
+        if (hiddenEdgeLabels.size === 0 && hiddenNodeLabels.size === 0) return data;
 
-        return {
-            nodes: data.nodes,
-            links: data.links.filter(l => !hiddenEdgeLabels.has(l.label))
-        };
-    }, [data, hiddenEdgeLabels]);
+        const nodes = data.nodes.filter(n => !hiddenNodeLabels.has(n.label));
+
+        const hiddenNodeIds = hiddenNodeLabels.size === 0 ? null : new Set(
+            data.nodes.filter(n => hiddenNodeLabels.has(n.label)).map(n => getSafeId(n.id))
+        );
+
+        const links = data.links.filter(l => {
+            if (hiddenEdgeLabels.has(l.label)) return false;
+            if (hiddenNodeIds && (hiddenNodeIds.has(getSafeId(l.source)) || hiddenNodeIds.has(getSafeId(l.target)))) return false;
+            return true;
+        });
+
+        return { nodes, links };
+    }, [data, hiddenEdgeLabels, hiddenNodeLabels]);
 
     const handleZoomIn = () => {
         if (fgRef.current) {
@@ -778,12 +788,35 @@ const GraphViz = ({
                         {/* Nodes */}
                         <div style={{ marginBottom: '0.75rem' }}>
                             <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Nodes</div>
-                            {Array.from(new Set(data.nodes.map(n => n.label))).map(label => (
-                                <div key={`node-${label}`} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: getNodeColor({ label }) }} />
-                                    <span style={{ fontSize: '0.85rem' }}>{label}</span>
-                                </div>
-                            ))}
+                            {Array.from(new Set(data.nodes.map(n => n.label))).map(label => {
+                                const isHidden = hiddenNodeLabels.has(label);
+                                return (
+                                    <div
+                                        key={`node-${label}`}
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '0.5rem',
+                                            marginBottom: '0.25rem',
+                                            cursor: 'pointer',
+                                            opacity: isHidden ? 0.5 : 1,
+                                            textDecoration: isHidden ? 'line-through' : 'none'
+                                        }}
+                                        onClick={() => {
+                                            setHiddenNodeLabels(prev => {
+                                                const next = new Set(prev);
+                                                if (next.has(label)) next.delete(label);
+                                                else next.add(label);
+                                                return next;
+                                            });
+                                        }}
+                                        title={isHidden ? "Click to show" : "Click to hide"}
+                                    >
+                                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: getNodeColor({ label }) }} />
+                                        <span style={{ fontSize: '0.85rem' }}>{label}</span>
+                                    </div>
+                                );
+                            })}
                         </div>
 
                         {/* Edges */}
